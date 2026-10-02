@@ -53,3 +53,52 @@ clip_cage_lifespans <- function(clip_cage = read_clip_cage()) {
       .by = c(aphid, id)
     )
 }
+
+#' Single-encounter behavior trials (2008; dissertation Ch. 2)
+#'
+#' 4th-instar larvae (`l4_day` = 1 or 2 days into the instar) starved for
+#' `starve` hours, given one adult bean aphid or a size-matched pea aphid on
+#' a fava leaf. Times in minutes:
+#' * `handle`: from securing the aphid until moving away from the feeding
+#'   site (`handle_end` = 1 if observed).
+#' * `post_handle`: from the end of handling until leaving the leaf
+#'   (`left` = 1 if observed). One trial has post_handle = 0.
+read_behavior_trials <- function() {
+  read_mac_csv(data_path("handle_depart_move.csv")) |>
+    dplyr::transmute(
+      id = ID,
+      aphid = factor(Aphid, levels = c("pea", "bean")),
+      l4_day = Age,
+      starve = Starve,
+      mass = Mass * 1000, # mg
+      handle = Handle,
+      handle_end = HandleEnd,
+      partial = Partial,
+      post_handle = Depart,
+      left = Left,
+      brush = Brush,
+      harass = Harass,
+      leaf_area = LeafArea
+    )
+}
+
+#' Handling time by aphid age (2005)
+#'
+#' Larvae starved ~2-4 h were offered one aphid of known age (days). Handling
+#' ended when the larva moved away from the feeding site (a censored trial is
+#' annotated "finished eating, but had not moved away from feeding site").
+#' `rejected` = 1 when the larva would not attack or eat the aphid; those rows
+#' have no handling time.
+read_handle_age <- function() {
+  read_mac_csv(data_path("HandleAge.csv")) |>
+    dplyr::transmute(
+      id = ID,
+      aphid = factor(tolower(Aphid.Species), levels = c("pea", "bean")),
+      aphid_age = Aphid.Age,
+      starve = Starve,
+      handle = Handle,
+      handle_end = 1L - Censored,
+      partial = Partial,
+      rejected = Rejected
+    )
+}

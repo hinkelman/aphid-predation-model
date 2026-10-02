@@ -27,7 +27,15 @@ Two pathways are of interest:
 
 ## Data inventory and interpretation
 
-All aphids were reared on fava beans.
+All aphids were reared on fava beans (*Vicia faba*), and all insects were kept at about 24 °C with a
+16:8 photoperiod. *H. convergens* adults came from a commercial supplier; larvae were reared
+individually from hatching (< 24 h) on excess pea aphids unless assigned to a diet treatment. Sources:
+dissertation Ch. 1 (diet) and Ch. 2 (behavior), `~/Dropbox/Research/UNL/Dissertation/latex/`.
+
+**Prey size matching.** Every predator experiment used size-matched prey: large (adult) bean aphids
+and pea aphids of similar size, chosen by eye. Apterous adults weigh about 0.9 mg for bean and
+about 3.8 mg for pea. So predator handling, consumption and development data all describe
+**~0.9 mg prey**, while the simulated aphid populations include every age and size.
 
 ### Aphid demography: `ClipCageData.xlsx` (Dec 2009)
 - 32 bean and 28 pea aphids in clip cages, followed daily from L1 to death, with offspring counted each day.
@@ -38,10 +46,12 @@ All aphids were reared on fava beans.
 ### Predator diet performance: `diet_performance_II.xlsx` = `develop.csv`, `feed.csv`, `diet_summary.csv` (Sep 2008)
 - Larvae reared from L1 on Bean (B), Pea (P) or Mixed (M) diets.
 - `develop`: daily stage and the `Disabled` / `Dead` flags.
-- `feed`: daily counts of aphids by status:
-  - `fed` = number offered;
-  - `eaten` = consumed (counted as **killed**);
-  - `dead` = not clearly eaten or fed upon but dead, either killed and left uneaten or died on its own. **Excluded from consumption.**
+- `feed`: daily counts of aphids by status (Ch. 1 methods):
+  - `fed` = number supplied, adjusted daily to the previous day's kills;
+  - `eaten` = **killed**: the number supplied minus live and dead aphids, i.e. aphids showing evidence of piercing;
+  - `dead` = dead with no evidence of piercing (background mortality in the vial). **Excluded from consumption.**
+- Development time to adult (Ch. 1, Table 1): bean 26.3 d, mixed 26.3 d, pea 17.0 d. Adult mass: 10.9, 12.1 and 21.5 mg.
+- On the mixed diet, larvae killed significantly **more bean than pea** aphids over the larval period (sign test, p = 0.024).
 - `diet_summary`: survival to adult (Eclose) is B 13%, M 45%, P 70% (this is `Survival.pdf`). Time to pupation is about 22 days on B and M and about 12 days on P.
 
 ### Diet switching: `DietTimingData.xlsx`
@@ -50,7 +60,10 @@ All aphids were reared on fava beans.
 - The discontinued second experiment (`DietTimingDataII.csv`, not in `data/`) used B1/B3/S1/S3 = bean or starved for 1 or 3 days, plus Block/Clutch codes.
 
 ### Single-encounter behavior: `handle_depart_move.csv`, `intensive.csv`, `inactivity.csv` (2008)
-- Arena: a fava leaf laid flat on an agar plate (`Agar` = new or reused plate). The larva was brought in on a piece of stem laid next to the leaf, and one aphid was placed in front of it to trigger an attack. Behavior after the attack was then recorded, including search on the leaf.
+- Predators: **4th-instar** larvae, 1 or 2 days into the instar (`Age`), starved 2–24 h before the trial.
+- Arena: a compound fava leaf (2 leaflets, about 48 cm²) on an agar plate (`Agar` = new or reused plate). The larva was moved in on a piece of stem or a brush. Prey was an adult bean aphid or a size-matched pea aphid placed at its mouthparts.
+- **Handling** runs from when the larva secures the aphid until it **moves away from the feeding site**. **Post-handling time** (`Depart`) runs from the end of handling until the larva is no longer touching the leaf or stem. Patch residence time = handling + post-handling.
+- Partial consumption: pea 0%, bean 85%.
 - `Handle` (min) with `HandleEnd` as the event flag. `Partial`, `Carry`, `Vomit`.
 - `Depart` (min) = patch (leaf) residence time after handling, with `Left` as the event flag. `PRT.short` = time until first revisiting the stem or departing.
 - `Starve` = hours without food before the trial. `Brush` and `Harass` are nuisance covariates left out of the final models.
@@ -80,10 +93,18 @@ All aphids were reared on fava beans.
 
 ### Predator processes
 1. **Search** on the current plant. Encounters occur at rate `a * N_species` (free parameter `a`, possibly stage-dependent).
-2. **Attack / handling**: Weibull handling time by aphid species, adjusted for hunger (Starve) and aphid age (HandleAge). Bean aphids are more often partially consumed.
-3. **Post-meal behavior**: inactivity and intensive search, with bean-induced lethargy.
-4. **Stay or leave**: the hazard of leaving the plant depends on Aphid × Starve (Cox / parametric fits to `Depart`). Leaving starts travel to the other plant (travel time is a free parameter).
-5. **Development**: each meal adds food value (bean < pea; partial meals count less). The larva molts when it reaches a stage-specific threshold, and the death hazard rises with poor nutrition or starvation.
+2. **Capture**: success is species-specific and a **free parameter**. Pea aphids escape well (they drop from the plant); bean aphids are easy to catch. This trades off against prey quality: pea is high quality but hard to catch, bean low quality but easy.
+3. **Rejection**: a captured aphid is rejected (not eaten) with probability logit⁻¹(−2.48 + 0.160 · age in days), from 2005. Species had no effect.
+4. **Handling** (`R/predator_behavior.R`): log-logistic AFT ~ aphid × starvation, fitted to the 2008 trials (size-matched prey). For other prey ages, handling is scaled by (age / ref_age)^1.30, where the exponent comes from the 2005 trials (species had no effect once age was included). ref_age is the age of the 2008 prey: 6.5 d for bean (adult) and 4.2 d for pea (0.9 mg on the provisional mass curve).
+5. **Partial consumption**: bean 85%, pea 0% (2008). The fraction eaten in a partial meal is unknown, so it is a free parameter.
+6. **Food value** = aphid mass at age × fraction eaten. Mass at age is **provisional** (`R/aphid_mass.R`): exponential growth from a neonate (pea 0.15 mg from the literature, still unverified; bean scaled by the same neonate:adult ratio) to adult mass (pea 3.8 mg, bean 0.9 mg) at maturity (pea 7.5 d, bean 6.5 d).
+7. **Post-handling / stay or leave**: Weibull AFT ~ aphid × starvation for the time to leave the plant after a meal, fitted to 2008 `Depart`. Each meal restarts the clock (a renewal process, as in the Cox analyses). Leaving starts travel to the other plant (travel time is a free parameter).
+8. **Starvation** in the model = hours since the last meal, clamped to the trial range of 2–24 h when predicting handling and post-handling times.
+9. **Development**: each meal adds food value (bean < pea; partial meals count less). The larva molts when it reaches a stage-specific threshold, and the death hazard rises with poor nutrition or starvation.
+
+#### Known issues with the behavior parameters
+- **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
+- Behavior data come only from 4th instars. Handling for earlier instars needs a scaling assumption (to be set when development is modeled).
 
 ### Calibration targets for predator development and survival
 - Development time per stage and survival to pupation and to adult under B, M and P diets (`develop`, `diet_summary`).
