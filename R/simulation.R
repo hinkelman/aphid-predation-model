@@ -30,11 +30,16 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   run_end <- scenario$run_days * minutes_per_day
 
   # ---- Aphid store ---------------------------------------------------------
+  # Parallel vectors indexed by slot. Slots of dead aphids are reused (free
+  # stack), so vectors scale with the living population, not with every
+  # aphid ever born. Unused slots have a_next = Inf, so which.min(a_next)
+  # over the whole vector finds the next aphid event without copying.
   cap <- 1024L
   a_sp <- integer(cap); a_plant <- integer(cap); a_birth <- numeric(cap)
   a_fec <- numeric(cap); a_next <- rep(Inf, cap); a_type <- integer(cap) # 1 birth, 2 death
   a_alive <- logical(cap)
-  n_used <- 0L
+  n_used <- 0L # high-water mark of slots ever used
+  free <- integer(0); n_free <- 0L
   N <- matrix(0L, 2, 2) # plant x species
   t <- 0
 
@@ -47,21 +52,55 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     cap <<- new_cap
   }
 
+  # Fast per-species lookups for event sampling. The birth CIF has knots at
+  # whole days (0, 1440, 2880, ... minutes), so evaluating it is O(1)
+  # arithmetic instead of approx().
+  death_shape <- vapply(p$aphid[species_names], `[[`, numeric(1), "death_shape")
+  death_scale <- vapply(p$aphid[species_names], `[[`, numeric(1), "death_scale")
+  frailty_shape <- vapply(p$aphid[species_names], `[[`, numeric(1), "frailty_shape")
+  cif_value <- lapply(p$aphid[species_names], `[[`, "cif_value")
+  cif_max <- vapply(cif_value, max, numeric(1))
+  cif_last_age <- vapply(p$aphid[species_names], \(a) max(a$cif_age), numeric(1))
+  stopifnot(all(vapply(p$aphid[species_names], \(a) isTRUE(all.equal(diff(a$cif_age), rep(minutes_per_day, length(a$cif_age) - 1))), logical(1))))
+
+  cif_eval <- function(sp, age) {
+    if (age >= cif_last_age[sp]) return(cif_max[sp])
+    x <- age / minutes_per_day
+    k <- floor(x)
+    v <- cif_value[[sp]]
+    v[k + 1L] + (v[k + 2L] - v[k + 1L]) * (x - k)
+  }
+
+  # Time to next birth by inversion of the CIF (see sample_birth_time()).
+  birth_wait <- function(sp, age, fec) {
+    target <- cif_eval(sp, age) + rexp(1) / fec
+    if (target >= cif_max[sp]) return(Inf)
+    v <- cif_value[[sp]]
+    k <- findInterval(target, v, checkSorted = FALSE, checkNA = FALSE) # largest knot <= target
+    (k - 1 + (target - v[k]) / (v[k + 1L] - v[k])) * minutes_per_day - age
+  }
+
   schedule_aphid <- function(i) {
     if (!is.null(vial)) { a_next[i] <<- Inf; return(invisible()) }
-    sp <- p$aphid[[a_sp[i]]]
+    sp <- a_sp[i]
     age <- t - a_birth[i]
-    death <- sp$death_scale * ((age / sp$death_scale)^sp$death_shape + rexp(1))^(1 / sp$death_shape) - age
-    birth <- sample_birth_time(age, sp$cif_age, sp$cif_value, a_fec[i])
+    sh <- death_shape[[sp]]; sc <- death_scale[[sp]]
+    death <- sc * ((age / sc)^sh + rexp(1))^(1 / sh) - age
+    birth <- birth_wait(sp, age, a_fec[i])
     if (birth < death) { a_next[i] <<- t + birth; a_type[i] <<- 1L } else { a_next[i] <<- t + death; a_type[i] <<- 2L }
   }
 
   add_aphid <- function(species, plant, birth_time) {
-    if (n_used == cap) grow()
-    n_used <<- n_used + 1L
-    i <- n_used
+    if (n_free > 0L) {
+      i <- free[n_free]
+      n_free <<- n_free - 1L
+    } else {
+      if (n_used == cap) grow()
+      n_used <<- n_used + 1L
+      i <- n_used
+    }
     a_sp[i] <<- species; a_plant[i] <<- plant; a_birth[i] <<- birth_time
-    a_fec[i] <<- sample_fecundity(1, p$aphid[[species]]$frailty_shape)
+    a_fec[i] <<- rgamma(1, shape = frailty_shape[[species]], rate = frailty_shape[[species]])
     a_alive[i] <<- TRUE
     N[plant, species] <<- N[plant, species] + 1L
     schedule_aphid(i)
@@ -72,6 +111,8 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     a_alive[i] <<- FALSE
     a_next[i] <<- Inf
     N[a_plant[i], a_sp[i]] <<- N[a_plant[i], a_sp[i]] - 1L
+    n_free <<- n_free + 1L
+    free[n_free] <<- i
   }
 
   # In vial mode prey were replaced daily with size-matched aphids, so prey
@@ -93,11 +134,12 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   # lag (overshoot, then a generation with no births and a senescent crash).
   # Exact thinning because g <= 1 and the unthinned birth process is each
   # aphid's own CIF.
-  m_adult <- setNames(p$mass$mass_adult, as.character(p$mass$aphid))[species_names]
+  m_adult <- unname(setNames(p$mass$mass_adult, as.character(p$mass$aphid))[species_names])
+  capacity <- p$aphid_capacity
   birth_succeeds <- function(plant) {
-    if (!is.finite(p$aphid_capacity)) return(TRUE)
-    density <- sum(N[plant, ] * m_adult)
-    runif(1) < max(0, 1 - density / p$aphid_capacity)
+    if (!is.finite(capacity)) return(TRUE)
+    density <- N[plant, 1L] * m_adult[1L] + N[plant, 2L] * m_adult[2L]
+    runif(1) < 1 - density / capacity # FALSE whenever density >= capacity
   }
 
   # initial aphids
@@ -239,7 +281,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   on_encounter <- function() {
     w <- p$capture * N[pr$plant, ]
     sp <- if (runif(1) < w[1] / sum(w)) 1L else 2L
-    pool <- which(a_alive[seq_len(n_used)] & a_plant[seq_len(n_used)] == pr$plant & a_sp[seq_len(n_used)] == sp)
+    pool <- which(a_alive & a_plant == pr$plant & a_sp == sp)
     i <- if (length(pool) == 1L) pool else sample(pool, 1L)
     age <- aphid_age_days(i)
     if (runif(1) < plogis(p$rejection[1] + p$rejection[2] * age)) {
@@ -345,8 +387,8 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   # ---- Main loop --------------------------------------------------------------
   ev_attack_time <- NA_real_
   repeat {
-    ia <- if (n_used > 0L) which.min(a_next[seq_len(n_used)]) else integer(0)
-    ta <- if (length(ia)) a_next[ia] else Inf
+    ia <- which.min(a_next)
+    ta <- a_next[ia]
     tp <- min(ev)
     t_next <- min(ta, tp, next_census, run_end)
 
