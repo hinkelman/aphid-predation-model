@@ -63,6 +63,7 @@ p_no_pred <- no_pred |>
   summarise(median = median(n), lo = quantile(n, 0.1), hi = quantile(n, 0.9), .by = c(setting, species, day)) |>
   mutate(setting = factor(setting, levels = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"))) |>
   filter(!(setting == "Pea aphids alone" & species == "bean"), !(setting == "Bean aphids alone" & species == "pea")) |>
+  mutate(species = factor(species, levels = c("pea", "bean"))) |>
   ggplot(aes(day, median, colour = species, fill = species)) +
   geom_hline(data = capacity_lines, aes(yintercept = n, colour = species), linetype = "22", linewidth = 0.4) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) +
@@ -186,7 +187,7 @@ p_suppression <- suppression |>
   labs(
     x = "Aphid species on plant 1 | plant 2", y = "Reduction in pea aphid-days on plant 1",
     title = "How much one larva suppresses pea aphids on its starting plant",
-    subtitle = sprintf("Over %d days, relative to the same scenario without a predator. Point: mean ± 95%% CI; shape: distribution across runs", run_days)
+    subtitle = sprintf("Over %d days, relative to the same scenario without a predator\nPoint: mean ± 95%% CI; shape: distribution across runs", run_days)
   ) +
   theme_model()
 ggsave("output/figures/exp_suppression.png", p_suppression, width = 7, height = 4.5, dpi = 200)

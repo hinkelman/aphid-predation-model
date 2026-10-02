@@ -146,6 +146,13 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Free parameters with provisional defaults**: search_rate 2 cm²/min, plant_area 400 cm², capture (pea 0.3, bean 0.8), digestion_rate, learn_meals, giving_up_time, travel_time, starvation medians, rejection_time. These should be explored by sensitivity analysis before drawing conclusions.
 - **Not yet represented**: alate production / aphid emigration, larval instar effects on capture of large prey and on handling (behavior data are L4 only), reduced search during post-bean inactivity bouts, and larval predators other than one larva.
 
+## Sensitivity analysis (`R/sensitivity.R`, `analysis/06_sensitivity.R`)
+
+- **Method**: Morris elementary-effects screening with `sensitivity::morris()`: 4 levels, grid jump 2, 10 trajectories → 100 parameter sets. Effects are scaled by factor range (`scale = TRUE`). Factors with wide ranges are sampled on a log10 scale.
+- **Factors and ranges**: encounter rate per aphid 0.001–0.02/min (log); capture pea 0.1–0.6; capture bean 0.5–1.0; digestion 2–8/day (log); bean learning 5–100 meals (log); giving-up time 30–480 min (log); travel 15–240 min (log); starvation tolerance ×0.5–2 (log); aphid capacity 1000–4000 mg (log).
+- **Scenarios** (30 days, larva starts on plant 1): Pea | pea, Pea | bean, Pea + bean | none. 20 replicate runs each per parameter set, with common random numbers (seeds depend only on scenario and replicate). No-predator baselines depend only on capacity and are run once per capacity level (40 runs each).
+- **Outputs**: suppression of pea aphid-days on plant 1 in each scenario; indirect effects ie_separate = supp(Pea | bean) − supp(Pea | pea) and ie_shared = supp(Pea + bean | none) − supp(Pea | pea), the latter including direct competition; pupation probability in each scenario.
+
 ## Repository layout
 ```
 R/          functions: data import/cleaning, fitting helpers, samplers, DES engine, scenarios
@@ -159,5 +166,5 @@ data/       raw data (read-only)
 - Travel time and cost between plants.
 - Aphid carrying capacity: no data; `aphid_capacity` should be in the sensitivity analysis.
 - How Starve (a lab treatment) maps onto the model's internal hunger state. Currently: hours since the last meal, clamped to 2–24 h.
-- Sensitivity analysis of the free parameters, especially search_rate/plant_area, capture, learn_meals, giving_up_time and travel_time.
+- Interpret the Morris screening (analysis/06) and decide which free parameters need data, literature values, or a finer (e.g. variance-based) analysis.
 - Whether `survival.csv` can be used to check per-encounter lethargy.
