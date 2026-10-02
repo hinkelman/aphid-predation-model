@@ -1,16 +1,13 @@
-# Two-plant simulation: calibration, validation, first experiment ---------
+# Two-plant simulation: calibration and validation -------------------------
 #
 # 1. Calibrates how fast bean-experienced larvae handle bean aphids so that
 #    simulated bean-diet vials match the 2008 kill rate of 4th instars.
 # 2. Checks the full simulation (vial mode) against the diet experiment.
-# 3. Runs a first two-plant experiment on indirect effects of bean aphids on
-#    pea aphids. Free parameters (search, capture, travel, giving-up time,
-#    starvation, learning rate) are at provisional defaults, so these results
-#    are illustrative, not conclusions.
+# The two-plant experiments are in analysis/05.
 #
 # Outputs:
 #   output/params/simulation.rds
-#   output/figures/sim_*.png
+#   output/figures/sim_bean_handling_calibration.png, sim_vial_validation.png
 
 library(dplyr)
 library(tidyr)
@@ -141,91 +138,3 @@ p_validation <- ggplot(stage_check, aes(stage, mean, colour = diet, shape = sour
   theme_model() +
   theme(strip.placement = "outside")
 ggsave("output/figures/sim_vial_validation.png", p_validation, width = 9, height = 5.5, dpi = 200)
-
-# 3. First two-plant experiment ----------------------------------------------
-#
-# Two fava bean plants; aphid species differ only in where they start. The
-# predator (one L1 Hippodamia convergens) starts on plant 1, which always
-# holds pea aphids. Does what is on plant 2 - or alongside the pea aphids on
-# plant 1 - change how much the predator suppresses pea aphids on plant 1?
-# Effects are measured against the same scenario without the predator.
-# Scenario labels: aphids on plant 1 | aphids on plant 2.
-
-scenarios <- tibble(
-  scenario = c("Pea | none", "Pea | pea", "Pea | bean", "Pea + bean | none"),
-  plant1 = list(c(pea = 5), c(pea = 5), c(pea = 5), c(pea = 5, bean = 5)),
-  plant2 = list(c(pea = 0), c(pea = 5), c(bean = 5), c(pea = 0))
-)
-
-reps <- 150
-experiment <- scenarios |>
-  crossing(predator = c(TRUE, FALSE)) |>
-  mutate(runs = purrr::pmap(list(plant1, plant2, predator), \(p1, p2, pred) {
-    sc <- two_plant_scenario(p1, p2, predator = pred, run_days = 14)
-    run_many(params, sc, reps, \(r) list(
-      census = r$census,
-      fate = r$predator$fate,
-      fate_day = r$predator$fate_day,
-      meals = r$meals |> count(plant, species)
-    ))
-  }))
-
-census <- experiment |>
-  mutate(census = purrr::map(runs, \(rs) bind_rows(purrr::map(rs, "census"), .id = "rep"))) |>
-  select(scenario, predator, census) |>
-  unnest(census)
-
-focal <- census |>
-  filter(plant == 1, species == "pea") |>
-  summarise(median = median(n), lo = quantile(n, 0.25), hi = quantile(n, 0.75),
-            .by = c(scenario, predator, day)) |>
-  mutate(scenario = factor(scenario, levels = scenarios$scenario))
-
-p_focal <- ggplot(focal, aes(day, median, linetype = predator)) +
-  geom_ribbon(aes(ymin = lo, ymax = hi, group = predator), fill = species_colours[["pea"]], alpha = 0.15) +
-  geom_line(colour = species_colours[["pea"]], linewidth = 0.7) +
-  facet_wrap(~scenario, nrow = 1) +
-  scale_y_log10(labels = scales::label_number(big.mark = ",")) +
-  scale_linetype_manual(values = c(`TRUE` = "solid", `FALSE` = "22"),
-                        labels = c(`TRUE` = "With predator", `FALSE` = "No predator")) +
-  labs(
-    x = "Day", y = "Pea aphids on plant 1 (log scale)", linetype = NULL,
-    title = "Pea aphids on the predator's starting plant",
-    subtitle = "Two fava plants. Panels: aphid species on plant 1 | plant 2 (5 adults each). Median and IQR of 150 runs"
-  ) +
-  theme_model()
-ggsave("output/figures/sim_focal_pea.png", p_focal, width = 10, height = 4, dpi = 200)
-
-# Suppression of pea on plant 1 at day 14 relative to no predator
-suppression <- census |>
-  filter(plant == 1, species == "pea", day == 14) |>
-  summarise(mean_n = mean(n), .by = c(scenario, predator)) |>
-  pivot_wider(names_from = predator, values_from = mean_n, names_prefix = "pred_") |>
-  mutate(suppression = 1 - pred_TRUE / pred_FALSE)
-
-predator_outcomes <- experiment |>
-  filter(predator) |>
-  mutate(
-    fates = purrr::map(runs, \(rs) tibble(fate = purrr::map_chr(rs, "fate"))),
-    meals = purrr::map(runs, \(rs) bind_rows(purrr::map(rs, "meals"), .id = "rep"))
-  )
-
-fates <- predator_outcomes |>
-  select(scenario, fates) |>
-  unnest(fates) |>
-  count(scenario, fate) |>
-  mutate(prop = n / sum(n), .by = scenario)
-
-diet <- predator_outcomes |>
-  select(scenario, meals) |>
-  unnest(meals) |>
-  summarise(n = sum(n) / reps, .by = c(scenario, species)) |>
-  pivot_wider(names_from = species, values_from = n, values_fill = 0)
-
-experiment_summary <- suppression |>
-  left_join(diet, by = "scenario") |>
-  left_join(fates |> filter(fate == "pupated") |> select(scenario, pupated = prop), by = "scenario")
-experiment_summary
-
-saveRDS(list(census = census, fates = fates, summary = experiment_summary),
-        "output/params/two_plant_experiment.rds")

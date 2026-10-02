@@ -86,6 +86,20 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     min(m$mass_neonate * exp(m$growth_rate * age_days), m$mass_adult)
   }
 
+  # Density dependence: births are thinned with probability
+  # g(D) = max(0, 1 - D / K), where D is aphid density on the plant in
+  # adult-mass equivalents (mg): each aphid counts its species' adult mass,
+  # both species combined. Counting newborns at full weight avoids a growth
+  # lag (overshoot, then a generation with no births and a senescent crash).
+  # Exact thinning because g <= 1 and the unthinned birth process is each
+  # aphid's own CIF.
+  m_adult <- setNames(p$mass$mass_adult, as.character(p$mass$aphid))[species_names]
+  birth_succeeds <- function(plant) {
+    if (!is.finite(p$aphid_capacity)) return(TRUE)
+    density <- sum(N[plant, ] * m_adult)
+    runif(1) < max(0, 1 - density / p$aphid_capacity)
+  }
+
   # initial aphids
   for (r in seq_len(nrow(scenario$aphids))) {
     row <- scenario$aphids[r, ]
@@ -350,7 +364,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       t <- ta
       plant <- a_plant[ia]
       if (a_type[ia] == 1L) {
-        add_aphid(a_sp[ia], plant, t)
+        if (birth_succeeds(plant)) add_aphid(a_sp[ia], plant, t)
         schedule_aphid(ia)
       } else {
         remove_aphid(ia)

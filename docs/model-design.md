@@ -21,7 +21,7 @@ Two pathways are of interest:
 | Predators | One larva per run |
 | Predator development | Dynamic: L1 → L4 → pupation, driven by what it eats |
 | Run end | Predator pupates or dies, then the run continues to a fixed length so aphid dynamics play out |
-| Run length | Several weeks eventually. Start with shorter runs **without aphid density dependence**; revisit carrying capacity later |
+| Run length | Several weeks (default experiment: 40 days). **Aphid density dependence** added 2026-10-02 (see Aphid processes) |
 | Encounter rate | No data. Free parameter; explore by sensitivity analysis or use literature values for *H. convergens* |
 | Code style | Modern R: dplyr, tidyr, ggplot2 |
 
@@ -90,6 +90,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Individual fecundity**: each aphid draws a multiplier m ~ Gamma(mean 1, SD about 0.11 for pea and 0.27 for bean) at birth (not inherited). It scales the birth intensity: the next birth is where the CIF has risen by E/m. The SD comes from a negative binomial fit of lifetime offspring, offset by log CIF(lifespan). Without it, simulated lifetime fecundity varied only about half as much as observed.
 - Pea aphid 23 (lived 24 d, never reproduced) is excluded from all fits as an abnormal individual.
 - Each aphid's next event is whichever of death and birth comes first. Newborns appear on their mother's plant.
+- **Density dependence** (free parameter `aphid_capacity`, default 2000 mg per plant): when a birth comes due it succeeds with probability max(0, 1 − D/K). D is the aphid density on that plant in **adult-mass equivalents**: each aphid counts its species' adult mass (pea 3.8 mg, bean 0.9 mg), both species combined. Without predators, 2000 mg gives plateaus of ~510 pea aphids or ~2150 bean aphids per plant. On a shared plant the species compete through D and coexist (~400 pea + ~500 bean). This **direct competition** is a second interaction between the aphid species alongside the predator-mediated one; scenarios with the species on separate plants exclude it. A version using actual biomass from the mass-at-age curves was rejected: its growth lag made populations overshoot, stop reproducing for a generation, and crash once the cohort senesced. It was also slow.
 - No density dependence for now.
 
 ### Predator processes
@@ -143,7 +144,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Mortality**: background plus L1 bean hazard, applied as a cumulative-hazard budget that is updated whenever the hazard changes.
 - **Vial mode** (calibration and validation): prey are replaced as eaten and held at the size-matched age, there is no aphid demography, the larva doesn't leave, and the arena is 50 cm² with capture = 1.
 - **Free parameters with provisional defaults**: search_rate 2 cm²/min, plant_area 400 cm², capture (pea 0.3, bean 0.8), digestion_rate, learn_meals, giving_up_time, travel_time, starvation medians, rejection_time. These should be explored by sensitivity analysis before drawing conclusions.
-- **Not yet represented**: aphid density dependence, larval instar effects on capture of large prey and on handling (behavior data are L4 only), reduced search during post-bean inactivity bouts, and larval predators other than one larva.
+- **Not yet represented**: alate production / aphid emigration, larval instar effects on capture of large prey and on handling (behavior data are L4 only), reduced search during post-bean inactivity bouts, and larval predators other than one larva.
 
 ## Repository layout
 ```
@@ -156,7 +157,7 @@ data/       raw data (read-only)
 ## Open items
 - Parameterizing the encounter rate: literature values for *H. convergens*, or scenario ranges.
 - Travel time and cost between plants.
-- Aphid carrying capacity for longer runs.
+- Aphid carrying capacity: no data; `aphid_capacity` should be in the sensitivity analysis.
 - How Starve (a lab treatment) maps onto the model's internal hunger state. Currently: hours since the last meal, clamped to 2–24 h.
 - Sensitivity analysis of the free parameters, especially search_rate/plant_area, capture, learn_meals, giving_up_time and travel_time.
 - Whether `survival.csv` can be used to check per-encounter lethargy.

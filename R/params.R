@@ -66,6 +66,11 @@ default_params <- function(param_dir = "output/params") {
     starvation_onset = 24 * 60, # no meal for this long counts as stopping feeding
 
     # Free parameters (no data) ----------------------------------------------
+    # Aphid carrying capacity per plant, in mg of adult-mass equivalents
+    # (each aphid counts its species' adult mass; both species combined).
+    # Births are thinned by max(0, 1 - density / capacity); Inf turns density
+    # dependence off. 2000 mg ~ 525 pea or ~2200 bean aphids.
+    aphid_capacity = 2000,
     # Gut: digestion rate (per day) and capacity set so the ad lib kill rate
     # (max_intake) is reached: capacity = 1 + max_intake / digestion_rate.
     digestion_rate = 4,
@@ -77,7 +82,9 @@ default_params <- function(param_dir = "output/params") {
     # Bean handling with experience: multiplier on bean handling time =
     # m + (1 - m) * exp(-bean_meals / learn_meals). m calibrated to the vial
     # kill rates (analysis/04), learn_meals free ("slow learners").
-    bean_handling_experienced = NA_real_,
+    bean_handling_experienced = if (file.exists(file.path(param_dir, "simulation.rds"))) {
+      readRDS(file.path(param_dir, "simulation.rds"))$bean_handling_experienced
+    } else NA_real_,
     learn_meals = 20,
     rejection_time = 1, # minutes lost on a rejected aphid
     giving_up_time = 120, # mean minutes on a plant without a meal before leaving
