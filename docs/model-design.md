@@ -70,6 +70,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - `intensive` and `inactivity`: bout durations in **seconds**. Video tracking was truncated at about 90 min (5394 s).
 
 ### Handling time vs aphid age: `HandleAge.csv` (2005)
+- **Lower trust than the 2008 data.** These were exploratory trials, and predator instar and condition can't be confirmed. Where the two conflict, 2008 wins. 2005 is used only where 2008 has no information: the *relative* effect of aphid age on handling, and rejection probability.
 - Handling time in **minutes**, by aphid age in days (1–12). Covers partial consumption, rejection and censoring.
 
 ### Aphid vials: `survival.csv` and `Aphid Survival Data.xls`
@@ -100,7 +101,24 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 6. **Food value** = aphid mass at age × fraction eaten. Mass at age is **provisional** (`R/aphid_mass.R`): exponential growth from a neonate (pea 0.15 mg from the literature, still unverified; bean scaled by the same neonate:adult ratio) to adult mass (pea 3.8 mg, bean 0.9 mg) at maturity (pea 7.5 d, bean 6.5 d).
 7. **Post-handling / stay or leave**: Weibull AFT ~ aphid × starvation for the time to leave the plant after a meal, fitted to 2008 `Depart`. Each meal restarts the clock (a renewal process, as in the Cox analyses). Leaving starts travel to the other plant (travel time is a free parameter).
 8. **Starvation** in the model = hours since the last meal, clamped to the trial range of 2–24 h when predicting handling and post-handling times.
-9. **Development**: each meal adds food value (bean < pea; partial meals count less). The larva molts when it reaches a stage-specific threshold, and the death hazard rises with poor nutrition or starvation.
+9. **Development** (`R/predator_development.R`; fitted in `analysis/03_predator_development.R`). Food is counted in **units**: one size-matched pea aphid (0.9 mg) fully eaten. An aphid of mass m is worth m/0.9 units if pea and v·m/0.9 if bean. This calibrated v replaces the separate partial-consumption fraction in item 6, so partial consumption isn't counted twice. Fitted from each larva's own observed daily kills in the diet experiment:
+   - **Thresholds** per instar: L1 9.0, L2 16.9, L3 31.1, L4 100.4 units. Individual log-threshold SD in the simulation: 0.2.
+   - **Bean value per kill**: v = 0.50 when bean is the only food, but **0.15 when pea is also eaten**. Mixed-diet larvae killed many bean aphids and gained little from them. Rule for the simulation: v = 0.15 if pea was eaten in the previous 24 h, otherwise 0.50.
+   - **Molting** happens when an instar's food reaches its threshold. L4 then enters a **1.5-day non-feeding pre-pupa** and pupates; the predator leaves the simulation at pupation.
+   - **Critical L4 food**: a larva with L4 food ≥ about 25 units (individual value ~ logistic with location 25.3 and scale 8.8) pupates even if it stops eating. The delay to pupation is 4.12 − 0.030·food days. Lower-food larvae that stop eating die.
+   - **Gut-limited intake**: maximum kills/day per instar (pea diet: L1 3.7, L2 9.2, L3 16.2, L4 40.7, using the first 2 days of L4) cap intake through a satiation/digestion rule in the full model. Kill rates were similar on bean, so the gut fills per aphid **killed**, not per unit of value.
+10. **Mortality** (daily hazard, cloglog model on the check intervals):
+   - Baseline: L1 0.035, L2–L3 0.014, L4 0.051, pupa 0.005 per day.
+   - **L1 bean toxicity**: hazard × (1 + bean/(1 + pea))^0.45, using kills since hatching. This is "amount eaten, buffered by pea", as chosen.
+   - **Pupation failure**: a larva reaching the L4 threshold pupates with probability (1 + bean/(1 + pea))^−0.15. γ = 0.15 was calibrated by simulating the diet and diet-timing experiments. Bean-fed 4th instars often ate well past the threshold and still died ("attempting to pupate").
+   - **Starvation**: no time-to-death data ("died as larva" only). Free parameter, still to be set when the full model is built.
+
+#### Development fit: known misfits (see `output/figures/development_*`)
+- Mixed-diet L1 is too fast in the simulation (3.2 d vs 5.3 d observed). Mixed-diet L1 larvae needed more units than the common threshold.
+- Diet-timing groups switched late (L4 day 3–4) pupated 100% in the experiment vs 82–94% in the simulation. That experiment had lower background mortality than the 2008 diet experiment that the hazards come from.
+- Larvae switched to bean late in L4 pupated within 1–1.6 d, as fast as starved larvae, but the simulation has them keep eating bean to the threshold (3 d). Starved from L4 day 2: 61% pupate in the simulation vs 82% observed.
+- **All larvae in every experiment were reared on pea aphids** before use, so the 2005 and 2008 behavior trials both used bean-naive larvae (a known criticism of the design: neither prey was novel in the same way). Rearing history therefore does not explain the 2005 vs 2008 bean handling difference. The diet-experiment larvae on B and M diets, however, ate bean from hatching.
+- Separately, **bean handling time vs vial kill rates**: bean-diet L4s killed ~25 bean aphids/day. At the 2008 handling times (~70+ min each) that would take more than 24 h a day; the 2005 handling times (~15–20 min) fit easily. Larvae with repeated bean experience may handle bean faster than the pea-reared larvae in the 2008 trials.
 
 #### Known issues with the behavior parameters
 - **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
