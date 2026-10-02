@@ -1,0 +1,407 @@
+# Two-plant discrete-event simulation ---------------------------------------
+#
+# One coccinellid larva foraging on two plants that hold pea and bean
+# aphids. Continuous time in minutes. Aphid events (births, deaths) are kept
+# in vectors and the next one is found with which.min(); the predator is a
+# state machine with its own schedule. See docs/model-design.md.
+#
+# Species codes: 1 = pea, 2 = bean. Plants: 1, 2.
+
+species_names <- c("pea", "bean")
+minutes_per_day <- 1440
+
+#' Run one simulation.
+#'
+#' @param params from default_params()
+#' @param scenario list with
+#'   * `aphids`: data frame with columns plant, species ("pea"/"bean"),
+#'     n, age (days) - the initial aphids
+#'   * `predator`: list(start_day, plant, stage = "L1"), or NULL for no predator
+#'   * `run_days`: total length of the run
+#'   * `vial`: optional list(species_share = c(pea, bean), n = aphids
+#'     available) - vial mode: no aphid demography, killed aphids are
+#'     replaced immediately by size-matched prey, and the larva never
+#'     leaves (used for calibration against the vial experiments)
+#' @return list(census, meals, predator)
+simulate_two_plants <- function(params, scenario, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  p <- params
+  vial <- scenario$vial
+  run_end <- scenario$run_days * minutes_per_day
+
+  # ---- Aphid store ---------------------------------------------------------
+  cap <- 1024L
+  a_sp <- integer(cap); a_plant <- integer(cap); a_birth <- numeric(cap)
+  a_fec <- numeric(cap); a_next <- rep(Inf, cap); a_type <- integer(cap) # 1 birth, 2 death
+  a_alive <- logical(cap)
+  n_used <- 0L
+  N <- matrix(0L, 2, 2) # plant x species
+  t <- 0
+
+  grow <- function() {
+    new_cap <- cap * 2L
+    a_sp <<- c(a_sp, integer(cap)); a_plant <<- c(a_plant, integer(cap))
+    a_birth <<- c(a_birth, numeric(cap)); a_fec <<- c(a_fec, numeric(cap))
+    a_next <<- c(a_next, rep(Inf, cap)); a_type <<- c(a_type, integer(cap))
+    a_alive <<- c(a_alive, logical(cap))
+    cap <<- new_cap
+  }
+
+  schedule_aphid <- function(i) {
+    if (!is.null(vial)) { a_next[i] <<- Inf; return(invisible()) }
+    sp <- p$aphid[[a_sp[i]]]
+    age <- t - a_birth[i]
+    death <- sp$death_scale * ((age / sp$death_scale)^sp$death_shape + rexp(1))^(1 / sp$death_shape) - age
+    birth <- sample_birth_time(age, sp$cif_age, sp$cif_value, a_fec[i])
+    if (birth < death) { a_next[i] <<- t + birth; a_type[i] <<- 1L } else { a_next[i] <<- t + death; a_type[i] <<- 2L }
+  }
+
+  add_aphid <- function(species, plant, birth_time) {
+    if (n_used == cap) grow()
+    n_used <<- n_used + 1L
+    i <- n_used
+    a_sp[i] <<- species; a_plant[i] <<- plant; a_birth[i] <<- birth_time
+    a_fec[i] <<- sample_fecundity(1, p$aphid[[species]]$frailty_shape)
+    a_alive[i] <<- TRUE
+    N[plant, species] <<- N[plant, species] + 1L
+    schedule_aphid(i)
+    i
+  }
+
+  remove_aphid <- function(i) {
+    a_alive[i] <<- FALSE
+    a_next[i] <<- Inf
+    N[a_plant[i], a_sp[i]] <<- N[a_plant[i], a_sp[i]] - 1L
+  }
+
+  # In vial mode prey were replaced daily with size-matched aphids, so prey
+  # age is held at the size-matched reference age.
+  aphid_age_days <- function(i) {
+    if (!is.null(vial)) return(p$ref_age[[species_names[a_sp[i]]]])
+    (t - a_birth[i]) / minutes_per_day
+  }
+
+  mass_of <- function(species, age_days) {
+    m <- p$mass[p$mass$aphid == species_names[species], ]
+    min(m$mass_neonate * exp(m$growth_rate * age_days), m$mass_adult)
+  }
+
+  # initial aphids
+  for (r in seq_len(nrow(scenario$aphids))) {
+    row <- scenario$aphids[r, ]
+    sp <- match(row$species, species_names)
+    for (k in seq_len(row$n)) add_aphid(sp, row$plant, -row$age * minutes_per_day)
+  }
+
+  # ---- Predator -------------------------------------------------------------
+  has_pred <- !is.null(scenario$predator)
+  ev <- c(start = Inf, encounter = Inf, reject_end = Inf, handle_end = Inf, gut_ready = Inf,
+          leave = Inf, arrive = Inf, death = Inf, starve_death = Inf, starve_check = Inf,
+          pupation = Inf)
+  pr <- list(state = "waiting", stage = 1L, plant = NA_integer_, food = 0, gut = 0, t_gut = 0,
+             bean_cum = 0, pea_cum = 0, last_meal = NA_real_, last_pea = -Inf, n_bean = 0L,
+             hazard_budget = rexp(1), t_hazard = 0, hazard = 0,
+             thresholds = p$threshold * exp(rnorm(4, 0, p$threshold_sd)),
+             crit_food = rlogis(1, p$critical_food$location, p$critical_food$scale),
+             prey = NA_integer_, prey_species = NA_integer_, prey_age = NA_real_,
+             starve_at_attack = NA_real_, fate = NA_character_, fate_time = NA_real_)
+  if (has_pred) ev["start"] <- scenario$predator$start_day * minutes_per_day
+
+  meals <- vector("list", 2000L); n_meals <- 0L
+  stage_log <- list()
+
+  digestion <- p$digestion_rate / minutes_per_day # per minute
+  # Gut capacity by instar. The larva attacks only when the gut has room for
+  # one more size-matched prey (gut <= C - 1); the gut empties exponentially
+  # at rate k throughout, including during handling. With ad lib prey the
+  # gut cycles between C - 1 (attack) and a +1 jump at the end of handling
+  # (duration h); a steady cycle of length T = 1 / (kills per day) requires
+  #   C - 1 = exp(-k (T - h)) / (1 - exp(-k T)).
+  capacities <- vapply(seq_along(p$max_intake), function(s) {
+    cycle <- minutes_per_day / p$max_intake[[s]]
+    h <- min(p$mean_pea_handling, cycle)
+    1 + exp(-digestion * (cycle - h)) / (1 - exp(-digestion * cycle))
+  }, numeric(1))
+  gut_capacity <- function() capacities[pr$stage]
+  gut_now <- function() pr$gut * exp(-digestion * (t - pr$t_gut))
+
+  hazard_now <- function() {
+    st <- if (pr$state == "prepupa") 4L else pr$stage
+    h <- exp(p$mortality$log_hazard[c("L1", "L2-3", "L2-3", "L4")[st]])
+    if (st == 1L) h <- h * (1 + pr$bean_cum / (1 + pr$pea_cum))^p$mortality$l1_bean_exponent
+    unname(h) / minutes_per_day
+  }
+  spend_hazard <- function() {
+    pr$hazard_budget <<- pr$hazard_budget - pr$hazard * (t - pr$t_hazard)
+    pr$t_hazard <<- t
+  }
+  refresh_death <- function() {
+    pr$hazard <<- hazard_now()
+    ev["death"] <<- t + max(pr$hazard_budget, 0) / pr$hazard
+  }
+  schedule_starvation <- function() {
+    # Lognormal around the median: a well-fed larva redraws this after every
+    # meal, so the distribution must put ~no mass at short times.
+    days <- p$starvation_median[[pr$stage]] * exp(rnorm(1, 0, p$starvation_sdlog))
+    ev["starve_death"] <<- pr$last_meal + days * minutes_per_day
+    ev["starve_check"] <<- pr$last_meal + p$starvation_onset
+  }
+
+  starve_hours <- function() {
+    h <- (t - pr$last_meal) / 60
+    min(max(h, p$starve_range[1]), p$starve_range[2])
+  }
+
+  update_encounter <- function() {
+    if (pr$state != "search") { ev["encounter"] <<- Inf; return(invisible()) }
+    w <- p$capture * N[pr$plant, ]
+    rate <- p$search_rate / p$plant_area * sum(w)
+    ev["encounter"] <<- if (rate > 0) t + rexp(1, rate) else Inf
+  }
+
+  go_hungry_or_satiated <- function() {
+    g <- gut_now()
+    cap_g <- gut_capacity()
+    if (g > cap_g - 1) {
+      pr$state <<- "satiated"
+      ev["gut_ready"] <<- t + log(g / (cap_g - 1)) / digestion
+      ev["encounter"] <<- Inf
+    } else {
+      pr$state <<- "search"
+      ev["gut_ready"] <<- Inf
+      update_encounter()
+    }
+  }
+
+  sample_handling <- function(species, age_days, starve_h) {
+    b <- p$handling$coef
+    is_bean <- species == 2L
+    lp <- b[["(Intercept)"]] + is_bean * b[["aphidbean"]] + starve_h * b[["starve"]] +
+      is_bean * starve_h * b[["aphidbean:starve"]] +
+      p$handling$age_exponent * log(age_days / p$ref_age[[species_names[species]]])
+    mult <- if (is_bean) {
+      m <- p$bean_handling_experienced
+      m + (1 - m) * exp(-pr$n_bean / p$learn_meals)
+    } else 1
+    exp(lp + p$handling$sigma * qlogis(runif(1))) * mult
+  }
+
+  sample_leave <- function(species, starve_h) {
+    b <- p$post_handling$coef
+    is_bean <- species == 2L
+    lp <- b[["(Intercept)"]] + is_bean * b[["aphidbean"]] + starve_h * b[["starve"]] +
+      is_bean * starve_h * b[["aphidbean:starve"]]
+    exp(lp + p$post_handling$sigma * log(-log(runif(1))))
+  }
+
+  finish <- function(fate) {
+    spend_hazard()
+    pr$fate <<- fate; pr$fate_time <<- t; pr$state <<- "done"
+    ev[] <<- Inf
+  }
+
+  start_prepupa <- function(duration) {
+    pr$state <<- "prepupa"
+    ev[c("encounter", "gut_ready", "leave", "starve_death", "starve_check")] <<- Inf
+    ev["pupation"] <<- t + duration
+  }
+
+  log_stage <- function() stage_log[[length(stage_log) + 1L]] <<- list(time = t, stage = pr$stage)
+
+  # ---- Predator event handlers ---------------------------------------------
+  on_start <- function() {
+    pr$plant <<- scenario$predator$plant
+    pr$stage <<- match(scenario$predator$stage %||% "L1", larval_stages)
+    pr$last_meal <<- t
+    pr$t_gut <<- t; pr$t_hazard <<- t
+    log_stage()
+    refresh_death()
+    schedule_starvation()
+    ev["start"] <<- Inf
+    if (is.null(vial)) ev["leave"] <<- t + rexp(1, 1 / p$giving_up_time)
+    go_hungry_or_satiated()
+  }
+
+  on_encounter <- function() {
+    w <- p$capture * N[pr$plant, ]
+    sp <- if (runif(1) < w[1] / sum(w)) 1L else 2L
+    pool <- which(a_alive[seq_len(n_used)] & a_plant[seq_len(n_used)] == pr$plant & a_sp[seq_len(n_used)] == sp)
+    i <- if (length(pool) == 1L) pool else sample(pool, 1L)
+    age <- aphid_age_days(i)
+    if (runif(1) < plogis(p$rejection[1] + p$rejection[2] * age)) {
+      pr$state <<- "rejecting"
+      ev["encounter"] <<- Inf
+      ev["reject_end"] <<- t + p$rejection_time
+      return(invisible())
+    }
+    pr$prey_species <<- sp
+    pr$prey_age <<- age
+    pr$starve_at_attack <<- starve_hours()
+    remove_aphid(i)
+    if (!is.null(vial)) replenish(sp)
+    pr$state <<- "handling"
+    ev["encounter"] <<- Inf
+    ev["leave"] <<- Inf # leave clock restarts after the meal
+    ev[c("starve_death", "starve_check")] <<- Inf # eating; restarted after the meal
+    ev["handle_end"] <<- t + sample_handling(sp, max(age, 1 / 24), pr$starve_at_attack)
+  }
+
+  on_reject_end <- function() {
+    ev["reject_end"] <<- Inf
+    pr$state <<- "search"
+    go_hungry_or_satiated()
+  }
+
+  on_handle_end <- function() {
+    ev["handle_end"] <<- Inf
+    sp <- pr$prey_species
+    m_units <- mass_of(sp, pr$prey_age) / unit_mass
+    v <- if (sp == 1L) 1 else if (t - pr$last_pea <= p$pea_memory) p$v_bean_mixed else p$v_bean_alone
+    spend_hazard()
+    pr$gut <<- gut_now() + m_units; pr$t_gut <<- t
+    pr$food <<- pr$food + v * m_units
+    if (sp == 1L) { pr$pea_cum <<- pr$pea_cum + m_units; pr$last_pea <<- t }
+    else { pr$bean_cum <<- pr$bean_cum + m_units; pr$n_bean <<- pr$n_bean + 1L }
+    pr$last_meal <<- t
+    n_meals <<- n_meals + 1L
+    if (n_meals > length(meals)) meals <<- c(meals, vector("list", length(meals)))
+    meals[[n_meals]] <<- list(time = t, plant = pr$plant, species = sp, aphid_age = pr$prey_age,
+                              handling = t - ev_attack_time, units = v * m_units, stage = pr$stage)
+
+    # development
+    while (pr$state != "prepupa" && pr$food >= pr$thresholds[pr$stage]) {
+      if (pr$stage < 4L) {
+        pr$food <<- 0
+        pr$stage <<- pr$stage + 1L
+        log_stage()
+      } else {
+        if (runif(1) > (1 + pr$bean_cum / (1 + pr$pea_cum))^(-p$pupation_gamma)) {
+          finish("failed_pupation")
+          return(invisible())
+        }
+        start_prepupa(p$prepupa_days * minutes_per_day)
+      }
+    }
+    refresh_death()
+    if (pr$state == "prepupa") return(invisible())
+    schedule_starvation()
+    if (is.null(vial)) ev["leave"] <<- t + sample_leave(sp, pr$starve_at_attack)
+    go_hungry_or_satiated()
+  }
+
+  on_gut_ready <- function() {
+    ev["gut_ready"] <<- Inf
+    pr$state <<- "search"
+    update_encounter()
+  }
+
+  on_leave <- function() {
+    if (pr$state %in% c("handling", "rejecting")) { ev["leave"] <<- Inf; return(invisible()) }
+    pr$state <<- "travel"
+    ev[c("leave", "encounter", "gut_ready")] <<- Inf
+    ev["arrive"] <<- t + p$travel_time
+  }
+
+  on_arrive <- function() {
+    ev["arrive"] <<- Inf
+    pr$plant <<- 3L - pr$plant
+    ev["leave"] <<- t + rexp(1, 1 / p$giving_up_time)
+    go_hungry_or_satiated()
+  }
+
+  on_starve_check <- function() {
+    ev["starve_check"] <<- Inf
+    if (pr$stage == 4L && pr$food >= pr$crit_food) {
+      delay <- (p$pupation_delay[[1]] + p$pupation_delay[[2]] * pr$food) * minutes_per_day
+      start_prepupa(max(delay - p$starvation_onset, 0))
+    }
+  }
+
+  replenish <- function(species) {
+    add_aphid(species, 1L, t - p$ref_age[[species_names[species]]] * minutes_per_day)
+  }
+
+  # ---- Census -----------------------------------------------------------------
+  n_days <- floor(scenario$run_days)
+  census <- matrix(NA_integer_, n_days + 1L, 4L)
+  census[1, ] <- as.vector(N)
+  next_census <- minutes_per_day
+  census_row <- 1L
+
+  # ---- Main loop --------------------------------------------------------------
+  ev_attack_time <- NA_real_
+  repeat {
+    ia <- if (n_used > 0L) which.min(a_next[seq_len(n_used)]) else integer(0)
+    ta <- if (length(ia)) a_next[ia] else Inf
+    tp <- min(ev)
+    t_next <- min(ta, tp, next_census, run_end)
+
+    if (next_census <= min(ta, tp) && next_census <= run_end) {
+      t <- next_census
+      census_row <- census_row + 1L
+      census[census_row, ] <- as.vector(N)
+      next_census <- next_census + minutes_per_day
+      if (census_row > n_days) break
+      next
+    }
+    if (min(ta, tp) >= run_end) break
+
+    if (ta <= tp) {
+      t <- ta
+      plant <- a_plant[ia]
+      if (a_type[ia] == 1L) {
+        add_aphid(a_sp[ia], plant, t)
+        schedule_aphid(ia)
+      } else {
+        remove_aphid(ia)
+      }
+      if (pr$state == "search" && pr$plant == plant) update_encounter()
+    } else {
+      t <- tp
+      e <- names(ev)[which.min(ev)]
+      if (e == "encounter") ev_attack_time <- t
+      switch(e,
+        start = on_start(),
+        encounter = on_encounter(),
+        reject_end = on_reject_end(),
+        handle_end = on_handle_end(),
+        gut_ready = on_gut_ready(),
+        leave = on_leave(),
+        arrive = on_arrive(),
+        death = finish("died"),
+        starve_death = finish("starved"),
+        starve_check = on_starve_check(),
+        pupation = finish("pupated")
+      )
+    }
+  }
+
+  census_df <- tibble::as_tibble(census[seq_len(census_row), , drop = FALSE], .name_repair = "minimal")
+  names(census_df) <- c("plant1_pea", "plant2_pea", "plant1_bean", "plant2_bean")
+  census_df <- census_df |>
+    dplyr::mutate(day = dplyr::row_number() - 1L) |>
+    tidyr::pivot_longer(-day, names_to = c("plant", "species"), names_sep = "_", values_to = "n") |>
+    dplyr::mutate(plant = as.integer(sub("plant", "", plant)))
+
+  list(
+    census = census_df,
+    meals = if (n_meals > 0L) {
+      dplyr::bind_rows(meals[seq_len(n_meals)]) |>
+        dplyr::mutate(species = species_names[species])
+    } else {
+      tibble::tibble(time = numeric(), plant = integer(), species = character(),
+                     aphid_age = numeric(), handling = numeric(), units = numeric(),
+                     stage = integer())
+    },
+    predator = list(
+      fate = if (!has_pred) NA_character_ else if (is.na(pr$fate)) "alive" else pr$fate,
+      fate_day = pr$fate_time / minutes_per_day,
+      stages = if (length(stage_log)) {
+        dplyr::bind_rows(stage_log) |>
+          dplyr::mutate(day = time / minutes_per_day, stage = larval_stages[stage])
+      } else {
+        tibble::tibble(time = numeric(), stage = character(), day = numeric())
+      }
+    )
+  )
+}

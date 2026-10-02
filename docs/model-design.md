@@ -17,7 +17,7 @@ Two pathways are of interest:
 | Topic | Decision |
 |---|---|
 | Model type | Continuous-time discrete-event simulation (DES), individual-based, clock in minutes |
-| Space | Two fava bean plants. Both aphid species can occur on either plant; the initial composition is a scenario setting |
+| System | **One plant species (fava bean, *Vicia faba*), two aphid species (pea and bean aphid), one predator species (*Hippodamia convergens*).** Two fava plants, identical as hosts; both aphid species can occur on either plant, and the initial composition is a scenario setting. Phrases like "pea plant" mean "the fava plant holding pea aphids". |
 | Predators | One larva per run |
 | Predator development | Dynamic: L1 → L4 → pupation, driven by what it eats |
 | Run end | Predator pupates or dies, then the run continues to a fixed length so aphid dynamics play out |
@@ -121,7 +121,8 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - Separately, **bean handling time vs vial kill rates**: bean-diet L4s killed ~25 bean aphids/day. At the 2008 handling times (~70+ min each) that would take more than 24 h a day; the 2005 handling times (~15–20 min) fit easily. Larvae with repeated bean experience may handle bean faster than the pea-reared larvae in the 2008 trials.
 
 #### Known issues with the behavior parameters
-- **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
+- **Bean handling differs between years — mostly a starvation effect.** At matched starvation (≤ 4.5 h, the 2005 range), 2008 bean handling has a median of 52 min (IQR 40–70, n = 7), against 20 min (IQR 11–51, n = 31) in 2005 for adult-sized bean aphids. Across all 2008 trials (2–24 h) the median is 126 min. So most of the apparent conflict came from comparing hungrier 2008 larvae with recently fed 2005 larvae. The 2008 model captures the effect through its aphid × starvation term. The remaining ~2.6× gap rests on 7 low-starvation 2008 trials.
+- (Earlier note) **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
 - Behavior data come only from 4th instars. Handling for earlier instars needs a scaling assumption (to be set when development is modeled).
 
 ### Calibration targets for predator development and survival
@@ -129,11 +130,25 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - Daily consumption by age and diet (`feed`, eaten only).
 - Responses to bean or starvation from L4 (`DietTimingData`).
 
-## Planned repository layout
+## Simulation engine (`R/simulation.R`, `R/params.R`, `R/scenarios.R`)
+
+- **Clock and events.** Continuous time in minutes. Aphid next-event times are held in vectors and the earliest is found with `which.min()`. The predator is a state machine with its own event schedule (encounter, rejection end, handling end, gut ready, leave, arrive, death, starvation, starvation check, pupation). Aphid counts are recorded at a census each day.
+- **Predator states**: search → (encounter) → rejecting | handling → search or satiated; travel between plants; pre-pupa; done.
+- **Encounters**: rate = (search_rate / plant_area) × Σ_species capture × N on the current plant. Redrawn whenever aphid numbers on that plant change, which is valid because the process is memoryless. The prey individual is chosen at random within the chosen species.
+- **Satiation**: the gut empties exponentially (digestion_rate = 4/day, free). The larva attacks only when the gut has room for one size-matched prey (gut ≤ C − 1). C for each instar is set so that, with ad lib prey, the steady cycle of handling plus digestion pause gives the observed ad lib kill rate: C − 1 = e^(−k(T−h)) / (1 − e^(−kT)), with T = 1/(kills/day) and h = mean pea handling (15 min). Gut fill per kill = aphid mass / 0.9 for both species.
+- **Hunger** for the behavior models = hours since the last meal, clamped to 2–24 h.
+- **Bean handling with experience**: bean handling multiplier = m + (1 − m)·exp(−bean meals / learn_meals). Naive larvae follow the 2008 trials (bean-naive, pea-reared). m is calibrated so that simulated bean-diet vials match the 2008 L4 kill rate of ~25 bean/day (`analysis/04`). learn_meals = 20 (free; "slow learners").
+- **Leaving a plant**: after each meal, the leave time comes from the post-handling Weibull model (species × starvation). On arrival, or with no meal yet, the larva leaves after an exponential giving-up time (mean 120 min, free). Travel takes 60 min (free).
+- **Starvation**: death at lognormal time since the last meal (median L1 1.5, L2 2, L3 2.5, L4 4 d; sdlog 0.25; free). The clock pauses during handling. An L4 with food ≥ its critical value that has gone 24 h without a meal enters the pre-pupa after the fitted delay.
+- **Mortality**: background plus L1 bean hazard, applied as a cumulative-hazard budget that is updated whenever the hazard changes.
+- **Vial mode** (calibration and validation): prey are replaced as eaten and held at the size-matched age, there is no aphid demography, the larva doesn't leave, and the arena is 50 cm² with capture = 1.
+- **Free parameters with provisional defaults**: search_rate 2 cm²/min, plant_area 400 cm², capture (pea 0.3, bean 0.8), digestion_rate, learn_meals, giving_up_time, travel_time, starvation medians, rejection_time. These should be explored by sensitivity analysis before drawing conclusions.
+- **Not yet represented**: aphid density dependence, larval instar effects on capture of large prey and on handling (behavior data are L4 only), reduced search during post-bean inactivity bouts, and larval predators other than one larva.
+
+## Repository layout
 ```
-R/          functions: data import/cleaning, fitting helpers, samplers, DES engine
-analysis/   scripts that fit each parameter set and plot fits against data (ggplot2)
-sim/        scenario definitions and simulation runs
+R/          functions: data import/cleaning, fitting helpers, samplers, DES engine, scenarios
+analysis/   numbered scripts: fit each parameter set, calibrate, validate, run experiments
 docs/       this design document
 data/       raw data (read-only)
 ```
@@ -142,5 +157,6 @@ data/       raw data (read-only)
 - Parameterizing the encounter rate: literature values for *H. convergens*, or scenario ranges.
 - Travel time and cost between plants.
 - Aphid carrying capacity for longer runs.
-- How Starve (a lab treatment) maps onto the model's internal hunger state.
+- How Starve (a lab treatment) maps onto the model's internal hunger state. Currently: hours since the last meal, clamped to 2–24 h.
+- Sensitivity analysis of the free parameters, especially search_rate/plant_area, capture, learn_meals, giving_up_time and travel_time.
 - Whether `survival.csv` can be used to check per-encounter lethargy.
