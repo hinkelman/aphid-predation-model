@@ -18,7 +18,8 @@ vial_scenario <- function(diet, params, n_prey = 30, run_days = 40) {
 #' Vial geometry: a small arena where prey are found quickly and cannot drop
 #' off a plant to escape.
 vial_params <- function(params) {
-  params$plant_area <- 50
+  params$plant_area <- 50 # vial surface; prey are searched over the whole vial
+  params$colony_min_area <- 50
   params$capture[] <- 1
   params
 }
@@ -26,12 +27,15 @@ vial_params <- function(params) {
 #' Two-plant scenario.
 #'
 #' @param plant1,plant2 named vectors of initial adults per species, e.g.
-#'   c(pea = 10, bean = 0)
+#'   c(pea = 2, bean = 0). Small founding colonies leave the aphids room to
+#'   grow on the large default plant before reaching capacity.
 #' @param predator TRUE to add one L1 larva on `predator_plant` at
-#'   `predator_day`
+#'   `predator_day`. The default (day 7) lets the founding colony establish
+#'   first, as ladybirds lay eggs at established colonies; a hatchling beside
+#'   2 founding adults mostly starves.
 #' @param adult_age age (days) of the initial adults
 two_plant_scenario <- function(plant1, plant2, predator = TRUE, predator_plant = 1L,
-                               predator_day = 0, run_days = 14, adult_age = 8) {
+                               predator_day = 7, run_days = 35, adult_age = 8) {
   aphids <- dplyr::bind_rows(
     tibble::tibble(plant = 1L, species = names(plant1), n = unname(plant1)),
     tibble::tibble(plant = 2L, species = names(plant2), n = unname(plant2))

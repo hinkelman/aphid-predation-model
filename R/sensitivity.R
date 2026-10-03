@@ -8,15 +8,19 @@
 free_parameter_ranges <- function() {
   tibble::tribble(
     ~factor,              ~low,   ~high,  ~log,
-    "encounter_rate",     0.001,  0.02,   TRUE,  # per aphid per minute
+    "detection_width",    2,      5,      FALSE, # mm, L4
+    "plant_area",         1000,   5000,   TRUE,  # cm^2 searchable surface
+    "colony_min_area",    2,      40,     TRUE,  # cm^2
+    "colony_density",     1,      10,     TRUE,  # mg aphid per cm^2 of colony
+    "prey_size_ratio",    1,      4,      TRUE,  # prey vs larval length scale
     "capture_pea",        0.1,    0.6,    FALSE,
     "capture_bean",       0.5,    1.0,    FALSE,
+    "leave_scaling",      0.25,   4,      TRUE,  # multiplier on area-scaled leave times
+    "plant_path",         600,    2400,   TRUE,  # mm between plants
     "digestion_rate",     2,      8,      TRUE,  # per day
     "learn_meals",        5,      100,    TRUE,
-    "giving_up_time",     30,     480,    TRUE,  # minutes
-    "travel_time",        15,     240,    TRUE,  # minutes
     "starvation_scale",   0.5,    2,      TRUE,  # multiplier on starvation medians
-    "aphid_capacity",     1000,   4000,   TRUE   # mg adult-mass equivalents
+    "aphid_capacity",     2500,   10000,  TRUE   # mg adult-mass equivalents
   )
 }
 
@@ -37,15 +41,13 @@ design_values <- function(x, ranges = free_parameter_ranges()) {
 #' Apply factor values (natural units) to a parameter list.
 apply_factors <- function(params, values) {
   v <- as.list(values)
-  if (!is.null(v$encounter_rate)) { params$search_rate <- v$encounter_rate; params$plant_area <- 1 }
+  direct <- c("detection_width", "plant_area", "colony_min_area", "colony_density",
+              "prey_size_ratio", "leave_scaling", "plant_path", "digestion_rate",
+              "learn_meals", "aphid_capacity")
+  for (nm in intersect(names(v), direct)) params[[nm]] <- v[[nm]]
   if (!is.null(v$capture_pea)) params$capture[["pea"]] <- v$capture_pea
   if (!is.null(v$capture_bean)) params$capture[["bean"]] <- v$capture_bean
-  if (!is.null(v$digestion_rate)) params$digestion_rate <- v$digestion_rate
-  if (!is.null(v$learn_meals)) params$learn_meals <- v$learn_meals
-  if (!is.null(v$giving_up_time)) params$giving_up_time <- v$giving_up_time
-  if (!is.null(v$travel_time)) params$travel_time <- v$travel_time
   if (!is.null(v$starvation_scale)) params$starvation_median <- params$starvation_median * v$starvation_scale
-  if (!is.null(v$aphid_capacity)) params$aphid_capacity <- v$aphid_capacity
   params
 }
 

@@ -8,7 +8,7 @@
 # 1. Aphid dynamics without predators: plateaus and competition on a shared
 #    plant.
 # 2. Indirect effects of bean aphids on pea aphids via the predator: the
-#    larva starts as an L1 on plant 1, which always holds pea aphids; what is
+#    larva hatches on day 7 as an L1 on plant 1, which always holds pea aphids; what is
 #    on plant 2, or alongside the pea aphids on plant 1, varies. Effects are
 #    measured against the same scenario without the predator.
 #
@@ -46,7 +46,7 @@ census_of <- function(runs) bind_rows(purrr::map(runs, "census"), .id = "rep")
 
 no_pred <- tibble(
   setting = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"),
-  plant1 = list(c(pea = 5), c(bean = 5), c(pea = 5, bean = 5))
+  plant1 = list(c(pea = 2), c(bean = 2), c(pea = 2, bean = 2))
 ) |>
   mutate(census = purrr::map(plant1, \(p1) {
     sc <- two_plant_scenario(p1, c(pea = 0), predator = FALSE, run_days = 60)
@@ -82,13 +82,13 @@ ggsave("output/figures/exp_aphids_no_predator.png", p_no_pred, width = 10, heigh
 
 # 2. Indirect effects via the predator -------------------------------------
 
-run_days <- 40
+run_days <- 35
 reps <- 100
 
 scenarios <- tibble(
   scenario = c("Pea | none", "Pea | pea", "Pea | bean", "Pea + bean | none"),
-  plant1 = list(c(pea = 5), c(pea = 5), c(pea = 5), c(pea = 5, bean = 5)),
-  plant2 = list(c(pea = 0), c(pea = 5), c(bean = 5), c(pea = 0))
+  plant1 = list(c(pea = 2), c(pea = 2), c(pea = 2), c(pea = 2, bean = 2)),
+  plant2 = list(c(pea = 0), c(pea = 2), c(bean = 2), c(pea = 0))
 )
 
 # Simulations take ~15 min on 11 cores; cached so summaries and figures can
@@ -131,7 +131,7 @@ p_focal <- census |>
   labs(
     x = "Day", y = "Pea aphids on plant 1", linetype = NULL,
     title = "Pea aphids on the predator's starting plant",
-    subtitle = sprintf("Two fava plants. Panels: aphid species on plant 1 | plant 2 (5 adults each). Median and IQR of %d runs", reps)
+    subtitle = sprintf("Two fava plants. Panels: aphid species on plant 1 | plant 2 (2 founding adults each; larva added on day 7). Median and IQR of %d runs", reps)
   ) +
   theme_model()
 ggsave("output/figures/exp_focal_pea.png", p_focal, width = 10, height = 4, dpi = 200)

@@ -127,3 +127,29 @@ reference_prey_age <- function(mass_anchors) {
     bean = bean$age_mature
   )
 }
+
+#' Larval movement after a meal (2008 tracking, 4th instars on a leaf).
+#'
+#' * `speed`: median speed while moving (mm/min); unrelated to starvation,
+#'   aphid species, or larval mass.
+#' * `activity`: proportion of time moving, quasi-binomial GLM ~ aphid *
+#'   starve. After a pea meal ~0.35 regardless of hunger; after a bean meal
+#'   lower, and lower still in hungrier larvae (lethargy).
+#' * `leaf_area`: mean area of the trial leaves (cm^2, one surface - leaves
+#'   lay flat on agar), the scale at which post-handling times were measured.
+fit_movement <- function(trials = read_behavior_trials()) {
+  tracked <- dplyr::filter(trials, !is.na(activity))
+  list(
+    speed = stats::median(tracked$move_speed) * 60,
+    activity = glm(activity ~ aphid * starve, family = quasibinomial, data = tracked),
+    leaf_area = mean(trials$leaf_area)
+  )
+}
+
+#' Proportion of time moving after a meal of `aphid` at hunger `starve` (h).
+activity_after_meal <- function(aphid, starve, movement) {
+  starve <- pmin(pmax(starve, starve_range[1]), starve_range[2])
+  unname(predict(movement$activity,
+                 tibble::tibble(aphid = factor(aphid, levels = c("pea", "bean")), starve = starve),
+                 type = "response"))
+}

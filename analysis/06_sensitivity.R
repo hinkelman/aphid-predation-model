@@ -3,8 +3,8 @@
 # Which free (unmeasured) parameters drive the predator's suppression of pea
 # aphids and the indirect effects of bean aphids on pea aphids?
 #
-# Scenarios (two fava plants; aphids on plant 1 | plant 2; one L1 larva
-# starts on plant 1; 30-day runs):
+# Scenarios (two fava plants; aphids on plant 1 | plant 2, 2 founding adults
+# each; one L1 larva hatches on plant 1 on day 7; 35-day runs):
 #   pp  = Pea | pea
 #   pb  = Pea | bean
 #   mix = Pea + bean | none
@@ -15,8 +15,8 @@
 #                                      competition between aphid species)
 #   pupate_*  proportion of larvae pupating
 #
-# Morris screening with sensitivity::morris(): 9 factors, 4 levels, grid jump
-# 2, 10 trajectories = 100 parameter sets. Log-range factors are sampled on a
+# Morris screening with sensitivity::morris(): 13 factors, 4 levels, grid jump
+# 2, 10 trajectories = 140 parameter sets. Log-range factors are sampled on a
 # log10 scale; elementary effects are scaled by factor range (scale = TRUE).
 # 20 replicate runs per scenario per set, with common random numbers (same
 # seeds in every set). Results are cached per set in output/sensitivity/, so
@@ -43,14 +43,14 @@ base_params <- default_params()
 stopifnot(is.finite(base_params$bean_handling_experienced))
 ranges <- free_parameter_ranges()
 
-run_days <- 30
+run_days <- 35
 reps <- as.integer(Sys.getenv("SENS_REPS", "20"))
 n_trajectories <- as.integer(Sys.getenv("SENS_R", "10"))
 baseline_reps <- 2L * reps
 scenarios <- list(
-  pp = two_plant_scenario(c(pea = 5), c(pea = 5), run_days = run_days),
-  pb = two_plant_scenario(c(pea = 5), c(bean = 5), run_days = run_days),
-  mix = two_plant_scenario(c(pea = 5, bean = 5), c(pea = 0), run_days = run_days)
+  pp = two_plant_scenario(c(pea = 2), c(pea = 2), run_days = run_days),
+  pb = two_plant_scenario(c(pea = 2), c(bean = 2), run_days = run_days),
+  mix = two_plant_scenario(c(pea = 2, bean = 2), c(pea = 0), run_days = run_days)
 )
 no_predator <- purrr::map(scenarios, \(s) { s$predator <- NULL; s })
 
@@ -154,9 +154,11 @@ output_labels <- c(
   pupate_pp = "Pupation: Pea | pea", pupate_pb = "Pupation: Pea | bean", pupate_mix = "Pupation: Pea + bean | none"
 )
 factor_labels <- c(
-  encounter_rate = "Encounter rate", capture_pea = "Capture: pea", capture_bean = "Capture: bean",
+  detection_width = "Detection width", plant_area = "Plant area",
+  colony_min_area = "Colony minimum area", colony_density = "Colony packing density",
+  prey_size_ratio = "Prey size limit", capture_pea = "Capture: pea", capture_bean = "Capture: bean",
+  leave_scaling = "Leave-time scaling", plant_path = "Path between plants",
   digestion_rate = "Digestion rate", learn_meals = "Bean learning (meals)",
-  giving_up_time = "Giving-up time", travel_time = "Travel time",
   starvation_scale = "Starvation tolerance", aphid_capacity = "Aphid capacity"
 )
 

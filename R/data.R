@@ -63,6 +63,9 @@ clip_cage_lifespans <- function(clip_cage = read_clip_cage()) {
 #'   site (`handle_end` = 1 if observed).
 #' * `post_handle`: from the end of handling until leaving the leaf
 #'   (`left` = 1 if observed). One trial has post_handle = 0.
+#' Movement over the tracked part of post-handling time (up to 90 min; NA for
+#' 13 untracked videos): `move_speed` (mm/s while moving) and `activity`
+#' (proportion of tracked time moving).
 read_behavior_trials <- function() {
   read_mac_csv(data_path("handle_depart_move.csv")) |>
     dplyr::transmute(
@@ -78,7 +81,9 @@ read_behavior_trials <- function() {
       left = Left,
       brush = Brush,
       harass = Harass,
-      leaf_area = LeafArea
+      leaf_area = LeafArea,
+      move_speed = MoveSpeed,
+      activity = Activity / 100
     )
 }
 

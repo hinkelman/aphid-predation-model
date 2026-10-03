@@ -160,10 +160,14 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
              thresholds = p$threshold * exp(rnorm(4, 0, p$threshold_sd)),
              crit_food = rlogis(1, p$critical_food$location, p$critical_food$scale),
              prey = NA_integer_, prey_species = NA_integer_, prey_age = NA_real_,
-             starve_at_attack = NA_real_, fate = NA_character_, fate_time = NA_real_)
+             starve_at_attack = NA_real_, activity = NA_real_, in_colony = FALSE,
+             n_encounters = 0L, n_failed = 0L, leave_remaining = NA_real_,
+             leave_species = 1L, leave_starve = 2, last_encounter = NA_real_,
+             fate = NA_character_, fate_time = NA_real_)
   if (has_pred) ev["start"] <- scenario$predator$start_day * minutes_per_day
 
   meals <- vector("list", 2000L); n_meals <- 0L
+  moves <- list()
   stage_log <- list()
 
   digestion <- p$digestion_rate / minutes_per_day # per minute
@@ -208,11 +212,64 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     min(max(h, p$starve_range[1]), p$starve_range[2])
   }
 
+  # Proportion of time moving after a meal of `species` at hunger `starve_h`
+  # (2008 tracking): ~0.4 after pea; lower after bean, more so when hungry.
+  activity_after <- function(species, starve_h) {
+    b <- p$activity
+    is_bean <- species == 2L
+    plogis(b[["(Intercept)"]] + is_bean * b[["aphidbean"]] + starve_h * b[["starve"]] +
+             is_bean * starve_h * b[["aphidbean:starve"]])
+  }
+
+  # Area searched per minute (mm^2): speed x activity x detection width,
+  # scaled by (body length / L4 length)^2 for earlier instars.
+  size_scale <- (p$larva_length / p$larva_length[["L4"]])^2
+  search_area <- function() p$speed * pr$activity * p$detection_width * size_scale[[pr$stage]]
+  plant_area_mm2 <- p$plant_area * 100
+
+  # Aphid aggregation. Aphids live in colonies whose area grows with aphid
+  # density (adult-mass equivalents, both species): colony area =
+  # colony_min_area + density / colony_density, capped at the plant area. A
+  # larva that has found the colony (hatched beside it, or has eaten on this
+  # plant - area-restricted search after a meal) searches only the colony
+  # area; on arriving at a plant it searches the whole plant until it eats.
+  search_space_mm2 <- function() {
+    if (!pr$in_colony) return(plant_area_mm2)
+    density <- N[pr$plant, 1L] * m_adult[1L] + N[pr$plant, 2L] * m_adult[2L]
+    min(p$plant_area, p$colony_min_area + density / p$colony_density) * 100
+  }
+
+  # Encounters: the larva meets aphids on its plant at random, at rate
+  # (area searched / search space) x number of aphids. Each encounter is an
+  # attack that succeeds with probability capture[species] x size factor.
   update_encounter <- function() {
     if (pr$state != "search") { ev["encounter"] <<- Inf; return(invisible()) }
-    w <- p$capture * N[pr$plant, ]
-    rate <- p$search_rate / p$plant_area * sum(w)
+    rate <- search_area() / search_space_mm2() * (N[pr$plant, 1L] + N[pr$plant, 2L])
     ev["encounter"] <<- if (rate > 0) t + rexp(1, rate) else Inf
+  }
+
+  # Prey size: small larvae cannot subdue large aphids. Size factor =
+  # 1 / (1 + (prey length / (prey_size_ratio x larval length))^size_steepness)
+  # with aphid length (mm) = aphid_length_coef x mass^(1/3).
+  capture_prob <- function(species, age_days) {
+    prey_len <- p$aphid_length_coef * mass_of(species, age_days)^(1 / 3)
+    size <- 1 / (1 + (prey_len / (p$prey_size_ratio * p$larva_length[[pr$stage]]))^p$size_steepness)
+    p$capture[[species]] * size
+  }
+
+  # Leaving a plant. Post-handling times were measured for leaving one leaf
+  # (trial_leaf_area). Walking off a leaf on a plant leads to another leaf of
+  # the same plant, so leaving the plant means giving up on ~n_leaves =
+  # plant_area / trial_leaf_area x leave_scaling leaves in turn: the leave time
+  # is the sum of n_leaves leaf-level draws. (Multiplying one draw by n_leaves
+  # would keep the fitted early-departure spike - Weibull shape < 1 - and
+  # larvae would walk off dense colonies minutes after a meal.) With no meal
+  # on this plant, the pea model at current hunger applies.
+  n_leaves <- max(1L, round(p$plant_area / p$trial_leaf_area * p$leave_scaling))
+  schedule_leave <- function(species, starve_h) {
+    if (!is.null(vial)) return(invisible())
+    pr$leave_remaining <<- NA_real_
+    ev["leave"] <<- t + sum(sample_leave(rep(species, n_leaves), starve_h))
   }
 
   go_hungry_or_satiated <- function() {
@@ -222,6 +279,13 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       pr$state <<- "satiated"
       ev["gut_ready"] <<- t + log(g / (cap_g - 1)) / digestion
       ev["encounter"] <<- Inf
+      # The leave clock measures unsuccessful searching, so it pauses while
+      # the larva is satiated (2008 leave times come from larvae searching a
+      # leaf with no prey left).
+      if (is.finite(ev[["leave"]])) {
+        pr$leave_remaining <<- ev[["leave"]] - t
+        ev["leave"] <<- Inf
+      }
     } else {
       pr$state <<- "search"
       ev["gut_ready"] <<- Inf
@@ -247,7 +311,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     is_bean <- species == 2L
     lp <- b[["(Intercept)"]] + is_bean * b[["aphidbean"]] + starve_h * b[["starve"]] +
       is_bean * starve_h * b[["aphidbean:starve"]]
-    exp(lp + p$post_handling$sigma * log(-log(runif(1))))
+    exp(lp + p$post_handling$sigma * log(-log(runif(length(species)))))
   }
 
   finish <- function(fate) {
@@ -270,21 +334,28 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     pr$stage <<- match(scenario$predator$stage %||% "L1", larval_stages)
     pr$last_meal <<- t
     pr$t_gut <<- t; pr$t_hazard <<- t
+    pr$activity <<- activity_after(1L, p$starve_range[1])
+    pr$in_colony <<- TRUE # eggs are laid next to aphid colonies
     log_stage()
     refresh_death()
     schedule_starvation()
     ev["start"] <<- Inf
-    if (is.null(vial)) ev["leave"] <<- t + rexp(1, 1 / p$giving_up_time)
+    # No leaving before the first meal: hatchlings emerge beside a colony and
+    # the leave rule (fitted to fed L4s) starts with the first meal.
     go_hungry_or_satiated()
   }
 
   on_encounter <- function() {
-    w <- p$capture * N[pr$plant, ]
-    sp <- if (runif(1) < w[1] / sum(w)) 1L else 2L
-    pool <- which(a_alive & a_plant == pr$plant & a_sp == sp)
+    pr$n_encounters <<- pr$n_encounters + 1L
+    pr$last_encounter <<- t
+    pool <- which(a_alive & a_plant == pr$plant)
     i <- if (length(pool) == 1L) pool else sample(pool, 1L)
+    sp <- a_sp[i]
     age <- aphid_age_days(i)
-    if (runif(1) < plogis(p$rejection[1] + p$rejection[2] * age)) {
+    # failed attack (aphid escapes) or rejection after capture: aphid survives
+    if (runif(1) > capture_prob(sp, age) ||
+        runif(1) < plogis(p$rejection[1] + p$rejection[2] * age)) {
+      pr$n_failed <<- pr$n_failed + 1L
       pr$state <<- "rejecting"
       ev["encounter"] <<- Inf
       ev["reject_end"] <<- t + p$rejection_time
@@ -319,6 +390,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     if (sp == 1L) { pr$pea_cum <<- pr$pea_cum + m_units; pr$last_pea <<- t }
     else { pr$bean_cum <<- pr$bean_cum + m_units; pr$n_bean <<- pr$n_bean + 1L }
     pr$last_meal <<- t
+    pr$in_colony <<- TRUE
     n_meals <<- n_meals + 1L
     if (n_meals > length(meals)) meals <<- c(meals, vector("list", length(meals)))
     meals[[n_meals]] <<- list(time = t, plant = pr$plant, species = sp, aphid_age = pr$prey_age,
@@ -341,27 +413,39 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     refresh_death()
     if (pr$state == "prepupa") return(invisible())
     schedule_starvation()
-    if (is.null(vial)) ev["leave"] <<- t + sample_leave(sp, pr$starve_at_attack)
+    pr$activity <<- activity_after(sp, pr$starve_at_attack)
+    schedule_leave(sp, pr$starve_at_attack)
     go_hungry_or_satiated()
   }
 
   on_gut_ready <- function() {
     ev["gut_ready"] <<- Inf
     pr$state <<- "search"
+    if (!is.na(pr$leave_remaining)) {
+      ev["leave"] <<- t + pr$leave_remaining
+      pr$leave_remaining <<- NA_real_
+    }
     update_encounter()
   }
 
   on_leave <- function() {
     if (pr$state %in% c("handling", "rejecting")) { ev["leave"] <<- Inf; return(invisible()) }
+    moves[[length(moves) + 1L]] <<- list(
+      time = t, from = pr$plant, stage = pr$stage, activity = pr$activity,
+      in_colony = pr$in_colony, since_meal = t - pr$last_meal,
+      since_encounter = t - pr$last_encounter,
+      aphids_here = N[pr$plant, 1L] + N[pr$plant, 2L]
+    )
     pr$state <<- "travel"
     ev[c("leave", "encounter", "gut_ready")] <<- Inf
-    ev["arrive"] <<- t + p$travel_time
+    ev["arrive"] <<- t + p$plant_path / (p$speed * pr$activity)
   }
 
   on_arrive <- function() {
     ev["arrive"] <<- Inf
     pr$plant <<- 3L - pr$plant
-    ev["leave"] <<- t + rexp(1, 1 / p$giving_up_time)
+    pr$in_colony <<- FALSE
+    schedule_leave(1L, starve_hours())
     go_hungry_or_satiated()
   }
 
@@ -452,6 +536,8 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     predator = list(
       fate = if (!has_pred) NA_character_ else if (is.na(pr$fate)) "alive" else pr$fate,
       fate_day = pr$fate_time / minutes_per_day,
+      n_encounters = pr$n_encounters, n_failed = pr$n_failed, final_plant = pr$plant,
+      moves = dplyr::bind_rows(moves),
       stages = if (length(stage_log)) {
         dplyr::bind_rows(stage_log) |>
           dplyr::mutate(day = time / minutes_per_day, stage = larval_stages[stage])

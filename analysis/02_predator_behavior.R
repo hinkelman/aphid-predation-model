@@ -53,6 +53,12 @@ summary(behavior$age_model$fit)
 summary(behavior$rejection)
 behavior$partial
 
+movement <- fit_movement(trials)
+movement$speed
+movement$leaf_area
+summary(movement$activity)
+behavior$movement <- movement
+
 mass_anchors <- aphid_mass_anchors()
 ref_age <- reference_prey_age(mass_anchors)
 mass_anchors
