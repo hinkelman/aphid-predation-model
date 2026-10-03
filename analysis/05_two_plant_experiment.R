@@ -1,9 +1,9 @@
 # Two-plant experiment ----------------------------------------------------
 #
 # One plant species (two fava plants), two aphid species (pea, bean), one
-# predator (a single Hippodamia convergens larva). Aphid density dependence:
-# births thinned by max(0, 1 - Dbar / capacity), Dbar = density in adult-mass
-# equivalents per plant (both species combined) averaged over ~1 day.
+# predator (a single Hippodamia convergens larva). Aphid density dependence
+# after the ALMaSS aphid model: delayed crowding mortality and winged
+# emigration, with partial competition between species (alpha).
 #
 # 1. Aphid dynamics without predators: plateaus and competition on a shared
 #    plant.
@@ -56,16 +56,12 @@ no_pred <- tibble(
   unnest(census) |>
   filter(plant == 1, n > 0 | day == 0)
 
-capacity_lines <- tibble(species = c("pea", "bean"),
-                         n = params$aphid_capacity / params$mass$mass_adult[match(c("pea", "bean"), params$mass$aphid)])
-
 p_no_pred <- no_pred |>
   summarise(median = median(n), lo = quantile(n, 0.1), hi = quantile(n, 0.9), .by = c(setting, species, day)) |>
   mutate(setting = factor(setting, levels = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"))) |>
   filter(!(setting == "Pea aphids alone" & species == "bean"), !(setting == "Bean aphids alone" & species == "pea")) |>
   mutate(species = factor(species, levels = c("pea", "bean"))) |>
   ggplot(aes(day, median, colour = species, fill = species)) +
-  geom_hline(data = capacity_lines, aes(yintercept = n, colour = species), linetype = "22", linewidth = 0.4) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) +
   geom_line(linewidth = 0.7) +
   facet_wrap(~setting, nrow = 1) +
@@ -74,8 +70,8 @@ p_no_pred <- no_pred |>
   labs(
     x = "Day", y = "Aphids on the plant", colour = NULL, fill = NULL,
     title = "Aphid dynamics on one fava plant without predators",
-    subtitle = sprintf("Capacity %s mg adult-mass equivalents (dashed: capacity in aphids of one species). Median, 10th–90th percentiles of 24 runs",
-                       format(params$aphid_capacity, big.mark = ","))
+    subtitle = sprintf("Plant %g g; crowding mortality (lag %d d) and winged emigration (ALMaSS); alpha = %g. Median, 10th-90th percentiles of 24 runs",
+                       params$plant_biomass, params$density_lag, params$competition_alpha)
   ) +
   theme_model()
 ggsave("output/figures/exp_aphids_no_predator.png", p_no_pred, width = 10, height = 4, dpi = 200)

@@ -16,8 +16,8 @@
 #                                      competition between aphid species)
 #   pupate_*  proportion of larvae pupating
 #
-# Morris screening with sensitivity::morris(): 15 factors, 4 levels, grid jump
-# 2, 10 trajectories = 160 parameter sets. Log-range factors are sampled on a
+# Morris screening with sensitivity::morris(): 16 factors, 4 levels, grid jump
+# 2, 10 trajectories = 170 parameter sets. Log-range factors are sampled on a
 # log10 scale; elementary effects are scaled by factor range (scale = TRUE).
 # 20 replicate runs per scenario per set, with common random numbers (same
 # seeds in every set). Results are cached per set in output/sensitivity/, so
@@ -47,7 +47,7 @@ ranges <- free_parameter_ranges()
 run_days <- 35
 reps <- as.integer(Sys.getenv("SENS_REPS", "20"))
 n_trajectories <- as.integer(Sys.getenv("SENS_R", "10"))
-baseline_reps <- 2L * reps
+baseline_reps <- reps
 make_scenarios <- function(hatch_day = 3) list(
   pp = two_plant_scenario(c(pea = 10), c(pea = 10), run_days = run_days, predator_day = hatch_day),
   pb = two_plant_scenario(c(pea = 10), c(bean = 10), run_days = run_days, predator_day = hatch_day),
@@ -77,21 +77,23 @@ mo <- readRDS(design_file)
 design <- as_tibble(mo$X) |>
   mutate(across(everything(), \(x) round(x, 8)), set = row_number(), .before = 1)
 
-# No-predator baselines: depend only on aphid capacity and density lag ------
+# No-predator baselines: depend only on the aphid density factors ----------
 
 baseline_file <- file.path(out_dir, "baselines.rds")
 if (!file.exists(baseline_file)) {
   tasks <- design |>
-    distinct(aphid_capacity, density_lag) |>
+    distinct(plant_biomass, competition_alpha, density_lag) |>
     crossing(scenario = names(scenarios), rep = seq_len(baseline_reps))
   pea_days <- parallel::mclapply(seq_len(nrow(tasks)), \(i) {
     tk <- tasks[i, ]
-    p <- apply_factors(base_params, c(aphid_capacity = 10^tk$aphid_capacity, density_lag = 10^tk$density_lag))
+    p <- apply_factors(base_params, c(plant_biomass = 10^tk$plant_biomass,
+                                      competition_alpha = tk$competition_alpha,
+                                      density_lag = tk$density_lag))
     focal_pea_days(simulate_two_plants(p, no_predator[[tk$scenario]], seed = 5e5 + i))
   }, mc.cores = n_cores)
   baselines <- tasks |>
     mutate(pea_days = unlist(pea_days)) |>
-    summarise(baseline = mean(pea_days), .by = c(aphid_capacity, density_lag, scenario))
+    summarise(baseline = mean(pea_days), .by = c(plant_biomass, competition_alpha, density_lag, scenario))
   saveRDS(baselines, baseline_file)
 }
 baselines <- readRDS(baseline_file)
@@ -125,9 +127,9 @@ for (i in seq_len(nrow(design))) {
 
 set_outputs <- design |>
   mutate(runs = purrr::map(set, \(i) readRDS(file.path(out_dir, sprintf("set_%03d.rds", i))))) |>
-  select(set, aphid_capacity, density_lag, runs) |>
+  select(set, plant_biomass, competition_alpha, density_lag, runs) |>
   unnest(runs) |>
-  left_join(baselines, by = c("aphid_capacity", "density_lag", "scenario")) |>
+  left_join(baselines, by = c("plant_biomass", "competition_alpha", "density_lag", "scenario")) |>
   summarise(
     supp = 1 - mean(pea_days) / first(baseline),
     pupate = mean(fate == "pupated"),
@@ -164,7 +166,8 @@ factor_labels <- c(
   prey_size_ratio = "Prey size limit", capture_pea = "Capture: pea", capture_bean = "Capture: bean",
   leave_scaling = "Leave-time scaling", plant_path = "Path between plants",
   digestion_rate = "Digestion rate", learn_meals = "Bean learning (meals)",
-  starvation_scale = "Starvation tolerance", aphid_capacity = "Aphid capacity",
+  starvation_scale = "Starvation tolerance", plant_biomass = "Plant biomass",
+  competition_alpha = "Aphid competition (alpha)",
   density_lag = "Density-dependence lag", hatch_day = "Hatch day"
 )
 

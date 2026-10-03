@@ -36,8 +36,13 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   # over the whole vector finds the next aphid event without copying.
   cap <- 1024L
   a_sp <- integer(cap); a_plant <- integer(cap); a_birth <- numeric(cap)
-  a_fec <- numeric(cap); a_next <- rep(Inf, cap); a_type <- integer(cap) # 1 birth, 2 death
-  a_alive <- logical(cap)
+  # Each aphid has a "base" next event (1 birth, 2 death, 4 emigration of a
+  # winged adult) from its own life history, and a crowding-death time a_dd
+  # (redrawn daily); a_next / a_type hold whichever comes first (type 3 =
+  # crowding death).
+  a_fec <- numeric(cap); a_next <- rep(Inf, cap); a_type <- integer(cap)
+  a_base_next <- rep(Inf, cap); a_base_type <- integer(cap); a_dd <- rep(Inf, cap)
+  a_alive <- logical(cap); a_alate <- logical(cap)
   n_used <- 0L # high-water mark of slots ever used
   free <- integer(0); n_free <- 0L
   N <- matrix(0L, 2, 2) # plant x species
@@ -49,6 +54,8 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     a_birth <<- c(a_birth, numeric(cap)); a_fec <<- c(a_fec, numeric(cap))
     a_next <<- c(a_next, rep(Inf, cap)); a_type <<- c(a_type, integer(cap))
     a_alive <<- c(a_alive, logical(cap))
+    a_base_next <<- c(a_base_next, rep(Inf, cap)); a_base_type <<- c(a_base_type, integer(cap))
+    a_dd <<- c(a_dd, rep(Inf, cap)); a_alate <<- c(a_alate, logical(cap))
     cap <<- new_cap
   }
 
@@ -80,17 +87,31 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     (k - 1 + (target - v[k]) / (v[k + 1L] - v[k])) * minutes_per_day - age
   }
 
+  # Winged (alate) aphids leave the plant when they mature, without
+  # reproducing on it.
+  age_mature <- setNames(p$mass$age_mature, as.character(p$mass$aphid))[species_names] * minutes_per_day
+
+  set_next <- function(i) {
+    if (a_dd[i] < a_base_next[i]) { a_next[i] <<- a_dd[i]; a_type[i] <<- 3L }
+    else { a_next[i] <<- a_base_next[i]; a_type[i] <<- a_base_type[i] }
+  }
+
   schedule_aphid <- function(i) {
     if (!is.null(vial)) { a_next[i] <<- Inf; return(invisible()) }
     sp <- a_sp[i]
     age <- t - a_birth[i]
     sh <- death_shape[[sp]]; sc <- death_scale[[sp]]
     death <- sc * ((age / sc)^sh + rexp(1))^(1 / sh) - age
-    birth <- birth_wait(sp, age, a_fec[i])
-    if (birth < death) { a_next[i] <<- t + birth; a_type[i] <<- 1L } else { a_next[i] <<- t + death; a_type[i] <<- 2L }
+    other <- if (a_alate[i]) max(age_mature[[sp]] - age, 0) else birth_wait(sp, age, a_fec[i])
+    if (other < death) {
+      a_base_next[i] <<- t + other; a_base_type[i] <<- if (a_alate[i]) 4L else 1L
+    } else {
+      a_base_next[i] <<- t + death; a_base_type[i] <<- 2L
+    }
+    set_next(i)
   }
 
-  add_aphid <- function(species, plant, birth_time) {
+  add_aphid <- function(species, plant, birth_time, alate = FALSE) {
     if (n_free > 0L) {
       i <- free[n_free]
       n_free <<- n_free - 1L
@@ -102,16 +123,16 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     a_sp[i] <<- species; a_plant[i] <<- plant; a_birth[i] <<- birth_time
     a_fec[i] <<- rgamma(1, shape = frailty_shape[[species]], rate = frailty_shape[[species]])
     a_alive[i] <<- TRUE
-    if (is.finite(capacity)) update_dbar(plant)
+    a_alate[i] <<- alate
+    a_dd[i] <<- if (is.null(vial)) t + rexp_or_inf(1, dd_rate[plant, species]) else Inf
     N[plant, species] <<- N[plant, species] + 1L
     schedule_aphid(i)
     i
   }
 
   remove_aphid <- function(i) {
-    if (is.finite(capacity)) update_dbar(a_plant[i])
     a_alive[i] <<- FALSE
-    a_next[i] <<- Inf
+    a_next[i] <<- Inf; a_base_next[i] <<- Inf; a_dd[i] <<- Inf
     N[a_plant[i], a_sp[i]] <<- N[a_plant[i], a_sp[i]] - 1L
     n_free <<- n_free + 1L
     free[n_free] <<- i
@@ -129,29 +150,43 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     min(m$mass_neonate * exp(m$growth_rate * age_days), m$mass_adult)
   }
 
-  # Density dependence: births are thinned with probability
-  # g = max(0, 1 - Dbar / K). D is aphid density on the plant in adult-mass
-  # equivalents (mg): each aphid counts its species' adult mass, both species
-  # combined (counting newborns at full weight avoids a growth lag). Dbar is an
-  # exponentially weighted average of D over the past ~density_lag days, so
-  # crowding acts with a delay and losses (e.g. to the predator) are not
-  # replaced instantly. D is constant between events, so Dbar is updated
-  # exactly: Dbar <- D + (Dbar - D) exp(-dt / lag). Exact thinning because
-  # g <= 1 and the unthinned birth process is each aphid's own CIF.
+  # Density dependence (after the ALMaSS aphid model, Thomsen et al. 2024):
+  # * Delayed crowding mortality: an extra death hazard ln(1 + k x) per day,
+  #   x = crowding density per gram of plant `density_lag` days earlier
+  #   (daily census), k by species. Crowding density for a species = own
+  #   count + competition_alpha x other species' count (alpha = 0: only
+  #   intraspecific crowding, as in ALMaSS; 1: all aphids count equally). Rates change only at day boundaries,
+  #   when every aphid's crowding death time is redrawn (exact: the hazard is
+  #   constant within a day).
+  # * Winged emigration: a newborn becomes winged with probability
+  #   (alate_slope x + alate_gs GS + alate_intercept) / 100 at the current
+  #   crowding density (Carter 1982); winged aphids leave at maturity without
+  #   reproducing.
   m_adult <- unname(setNames(p$mass$mass_adult, as.character(p$mass$aphid))[species_names])
-  capacity <- p$aphid_capacity
-  lag <- p$density_lag * minutes_per_day
-  dbar <- c(0, 0); t_dbar <- c(0, 0)
+  # aphid density in adult-mass equivalents (mg): sets the colony area
   density_now <- function(plant) N[plant, 1L] * m_adult[1L] + N[plant, 2L] * m_adult[2L]
-  update_dbar <- function(plant) {
-    if (lag <= 0) { dbar[plant] <<- density_now(plant); return(invisible()) }
-    dbar[plant] <<- density_now(plant) + (dbar[plant] - density_now(plant)) * exp(-(t - t_dbar[plant]) / lag)
-    t_dbar[plant] <<- t
+  dd_k <- unname(p$crowding_k[species_names])
+  dd_rate <- matrix(0, 2, 2) # plant x species, per minute
+  rexp_or_inf <- function(n, rate) { x <- rexp(n, pmax(rate, 1e-300)); x[rate <= 0] <- Inf; x }
+  alpha <- p$competition_alpha
+  # crowding density (aphids per g) felt by each species, from counts c(pea, bean)
+  crowding <- function(counts) (counts + alpha * rev(counts)) / p$plant_biomass
+  update_dd_rates <- function(lagged) { # lagged: plant x species counts
+    for (pl in 1:2) dd_rate[pl, ] <<- log1p(dd_k * crowding(lagged[pl, ])) / minutes_per_day
   }
-  birth_succeeds <- function(plant) {
-    if (!is.finite(capacity)) return(TRUE)
-    update_dbar(plant)
-    runif(1) < 1 - dbar[plant] / capacity # FALSE whenever Dbar >= capacity
+  redraw_crowding_deaths <- function() {
+    idx <- which(a_alive)
+    if (!length(idx)) return(invisible())
+    rate <- dd_rate[cbind(a_plant[idx], a_sp[idx])]
+    a_dd[idx] <<- t + rexp_or_inf(length(idx), rate)
+    dd_first <- a_dd[idx] < a_base_next[idx]
+    a_next[idx] <<- ifelse(dd_first, a_dd[idx], a_base_next[idx])
+    a_type[idx] <<- ifelse(dd_first, 3L, a_base_type[idx])
+  }
+  newborn_is_alate <- function(plant, species) {
+    x <- crowding(N[plant, ])[species]
+    pr_alate <- (p$alate$slope * x + p$alate$growth_stage_coef * p$alate$growth_stage + p$alate$intercept) / 100
+    runif(1) < pr_alate
   }
 
   # initial aphids; age NA = draw founder ages from the stable age
@@ -479,6 +514,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   n_days <- floor(scenario$run_days)
   census <- matrix(NA_integer_, n_days + 1L, 4L)
   census[1, ] <- as.vector(N)
+  emigrants <- matrix(0L, 2, 2, dimnames = list(plant = 1:2, species = species_names))
   next_census <- minutes_per_day
   census_row <- 1L
 
@@ -495,6 +531,11 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       census_row <- census_row + 1L
       census[census_row, ] <- as.vector(N)
       next_census <- next_census + minutes_per_day
+      if (is.null(vial)) {
+        lagged <- census[max(1L, census_row - p$density_lag), ]
+        update_dd_rates(matrix(lagged, 2, 2)) # census columns: plant x species
+        redraw_crowding_deaths()
+      }
       if (census_row > n_days) break
       next
     }
@@ -504,9 +545,10 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       t <- ta
       plant <- a_plant[ia]
       if (a_type[ia] == 1L) {
-        if (birth_succeeds(plant)) add_aphid(a_sp[ia], plant, t)
+        add_aphid(a_sp[ia], plant, t, alate = newborn_is_alate(plant, a_sp[ia]))
         schedule_aphid(ia)
       } else {
+        if (a_type[ia] == 4L) emigrants[plant, a_sp[ia]] <- emigrants[plant, a_sp[ia]] + 1L
         remove_aphid(ia)
       }
       if (pr$state == "search" && pr$plant == plant) update_encounter()
@@ -539,6 +581,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
 
   list(
     census = census_df,
+    emigrants = emigrants,
     meals = if (n_meals > 0L) {
       dplyr::bind_rows(meals[seq_len(n_meals)]) |>
         dplyr::mutate(species = species_names[species])

@@ -101,7 +101,12 @@ default_params <- function(param_dir = "output/params") {
     # Plants are separate: walk down one plant, across soil, up the other.
     # Travel time = path / (speed x activity).
     plant_path = 900, # mm (~30 cm down, ~30 cm across, ~30 cm up)
-    capture = c(pea = 0.3, bean = 0.8), # pea aphids drop off; bean rarely do
+    # Capture per encounter. Pea aphids escape by walking off or dropping:
+    # adult H. convergens consumed 1 of 72 pea aphids encountered in alfalfa
+    # field arenas (Nelson & Rosenheim 2006); ladybirds trigger dropping >3x
+    # as often as damsel bugs (Losey & Denno 1998). No larval or bean aphid
+    # data; bean aphids rarely drop.
+    capture = c(pea = 0.1, bean = 0.8),
     # Prey size vs larval size (assumptions): capture is multiplied by
     # 1 / (1 + (prey length / (prey_size_ratio x larval length))^size_steepness);
     # aphid length (mm) = aphid_length_coef x mass(mg)^(1/3) (adult pea ~3.75
@@ -114,17 +119,32 @@ default_params <- function(param_dir = "output/params") {
     aphid_length_coef = 2.4,
 
     # Free parameters (no data) ----------------------------------------------
-    # Aphid carrying capacity per plant, in mg of adult-mass equivalents
-    # (each aphid counts its species' adult mass; both species combined).
-    # Births are thinned by max(0, 1 - density / capacity); Inf turns density
-    # dependence off. ~2 mg per cm^2 of searchable surface: 1600 mg ~ 420 pea
-    # or ~1780 bean aphids.
-    aphid_capacity = 1600,
-    # Crowding acts with a delay: births are thinned by the density averaged
-    # (exponentially weighted) over the past ~density_lag days, so losses are
-    # not replaced instantly (assumption; 0 = instantaneous). Lags >= 2 days
-    # give overshoot and boom-bust cycles without predators.
-    density_lag = 1,
+    # Aphid density dependence, after the ALMaSS aphid model (Thomsen, Duan &
+    # Topping 2024, Food Ecol. Syst. Model. J. 5:e123747):
+    # * delayed crowding mortality: extra hazard ln(1 + k x) per day, x =
+    #   aphids per gram of plant density_lag days earlier; k from their Table
+    #   5 (their density-independent survivorship Sa = 0.9 is not used: it
+    #   stands for field predators, and clip-cage lifespans set baseline
+    #   mortality here).
+    # * winged emigration: % winged offspring = slope x + gs_coef GS +
+    #   intercept (Carter 1982, adapted by ALMaSS), GS = plant growth stage
+    #   (Zadoks-type 1-10 scale; ~3.5 for a vegetative plant).
+    crowding_k = c(pea = 0.012, bean = 0.02), # per (aphids / g)
+    # Lag 1 day, not ALMaSS's 4: on a single plant, with growth ~0.38/day,
+    # a 4-day lag (and 2 days) gives boom-bust cycles; ALMaSS works on 10 x 10
+    # m field cells with immigration and background mortality.
+    density_lag = 1L, # days
+    # Crowding between species: a species' crowding density = own count +
+    # competition_alpha x other species' count. ALMaSS models species
+    # separately (alpha = 0); with alpha = 1 pea aphids exclude bean aphids on
+    # a shared plant (bean has the higher k). Unknown; explored in the
+    # sensitivity analysis.
+    competition_alpha = 0.5,
+    alate = list(slope = 2.603, growth_stage_coef = 0.847, intercept = -27.189,
+                 growth_stage = 3.5),
+    # Fresh green biomass of the plant (g): ~370 cm^2 leaf area per side /
+    # SLA 25.7 mm^2/mg ~ 1.4 g dry leaf, plus stem, at ~90% water.
+    plant_biomass = 20,
     # Gut: digestion rate (per day); gut capacity is set so the ad lib kill
     # rate (max_intake) is reached (see simulate_two_plants()).
     digestion_rate = 4,
