@@ -154,11 +154,13 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     runif(1) < 1 - dbar[plant] / capacity # FALSE whenever Dbar >= capacity
   }
 
-  # initial aphids
+  # initial aphids; age NA = draw founder ages from the stable age
+  # distribution (two_plant_scenario(founders = "stable"))
   for (r in seq_len(nrow(scenario$aphids))) {
     row <- scenario$aphids[r, ]
     sp <- match(row$species, species_names)
-    for (k in seq_len(row$n)) add_aphid(sp, row$plant, -row$age * minutes_per_day)
+    ages <- if (is.na(row$age)) sample_founder_ages(row$n, p, row$species) else rep(row$age, row$n)
+    for (a in ages) add_aphid(sp, row$plant, -a * minutes_per_day)
   }
 
   # ---- Predator -------------------------------------------------------------

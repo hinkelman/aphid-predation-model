@@ -3,7 +3,7 @@
 # Which free (unmeasured) parameters drive the predator's suppression of pea
 # aphids and the indirect effects of bean aphids on pea aphids?
 #
-# Scenarios (two fava plants; aphids on plant 1 | plant 2, 2 founding adults
+# Scenarios (two fava plants; aphids on plant 1 | plant 2, 10 mixed-age founders
 # each; one L1 larva hatches on plant 1 on `hatch_day` (a factor); 35-day
 # runs):
 #   pp  = Pea | pea
@@ -49,9 +49,9 @@ reps <- as.integer(Sys.getenv("SENS_REPS", "20"))
 n_trajectories <- as.integer(Sys.getenv("SENS_R", "10"))
 baseline_reps <- 2L * reps
 make_scenarios <- function(hatch_day = 3) list(
-  pp = two_plant_scenario(c(pea = 2), c(pea = 2), run_days = run_days, predator_day = hatch_day),
-  pb = two_plant_scenario(c(pea = 2), c(bean = 2), run_days = run_days, predator_day = hatch_day),
-  mix = two_plant_scenario(c(pea = 2, bean = 2), c(pea = 0), run_days = run_days, predator_day = hatch_day)
+  pp = two_plant_scenario(c(pea = 10), c(pea = 10), run_days = run_days, predator_day = hatch_day),
+  pb = two_plant_scenario(c(pea = 10), c(bean = 10), run_days = run_days, predator_day = hatch_day),
+  mix = two_plant_scenario(c(pea = 10, bean = 10), c(pea = 0), run_days = run_days, predator_day = hatch_day)
 )
 scenarios <- make_scenarios()
 no_predator <- purrr::map(scenarios, \(s) { s$predator <- NULL; s })

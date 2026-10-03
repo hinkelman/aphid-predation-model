@@ -26,22 +26,29 @@ vial_params <- function(params) {
 
 #' Two-plant scenario.
 #'
-#' @param plant1,plant2 named vectors of initial adults per species, e.g.
-#'   c(pea = 2, bean = 0). Small founding colonies leave the aphids room to
-#'   grow on the large default plant before reaching capacity.
+#' @param plant1,plant2 named vectors of founding aphids per species, e.g.
+#'   c(pea = 10, bean = 0). With stable-age founders, 10 aphids (~1 adult)
+#'   give ~30-45 aphids by day 3, like 2 adult founders. Small founding colonies leave the aphids room to
+#'   grow before reaching capacity.
 #' @param predator TRUE to add one L1 larva on `predator_plant` at
 #'   `predator_day`. Default day 3: the colony (2 founders) has ~20 aphids, a
 #'   hatchling can survive, and one larva can still depress or deplete it
 #'   (from day 4-5 the colony outgrows a single larva).
-#' @param adult_age age (days) of the initial adults
+#' @param founders "stable" (default): each colony's founders have mixed ages
+#'   drawn from the species' stable age distribution, so colonies don't start
+#'   as one synchronized cohort. Ages are drawn inside simulate_two_plants()
+#'   with the run's seed (common random numbers across parameter sets).
+#'   "adults": all founders are adults of `adult_age` days.
 two_plant_scenario <- function(plant1, plant2, predator = TRUE, predator_plant = 1L,
-                               predator_day = 3, run_days = 35, adult_age = 8) {
+                               predator_day = 3, run_days = 35, adult_age = 8,
+                               founders = c("stable", "adults")) {
+  founders <- match.arg(founders)
   aphids <- dplyr::bind_rows(
     tibble::tibble(plant = 1L, species = names(plant1), n = unname(plant1)),
     tibble::tibble(plant = 2L, species = names(plant2), n = unname(plant2))
   ) |>
     dplyr::filter(n > 0) |>
-    dplyr::mutate(age = adult_age)
+    dplyr::mutate(age = if (founders == "adults") adult_age else NA_real_)
   list(
     aphids = aphids,
     predator = if (predator) list(start_day = predator_day, plant = predator_plant, stage = "L1"),
@@ -63,4 +70,25 @@ summarize_vial_run <- function(run, params) {
     days = (ends - st$time) / minutes_per_day,
     kills = kills$n[match(seq_along(st$stage), kills$stage)]
   )
+}
+
+#' Stable age distribution of an aphid species (days), from the fitted
+#' life table: survival l(x) from the Weibull lifespan, daily fecundity m(x)
+#' from the birth CIF; lambda solves Euler-Lotka sum lambda^-x l(x) m(x) = 1
+#' and c(x) ~ lambda^-x l(x). Returns a tibble of age (days) and proportion.
+stable_age_distribution <- function(params, species) {
+  a <- params$aphid[[species]]
+  age <- seq(0, max(a$cif_age) / minutes_per_day) # whole days
+  surv <- pweibull(age * minutes_per_day, a$death_shape, a$death_scale, lower.tail = FALSE)
+  fec <- c(diff(a$cif_value), 0) # offspring in (x, x + 1]
+  lotka <- \(lambda) sum(lambda^-(age + 1) * surv * fec) - 1
+  lambda <- uniroot(lotka, c(1.0001, 5))$root
+  c_x <- lambda^-age * surv
+  tibble::tibble(age = age, prop = c_x / sum(c_x), lambda = lambda)
+}
+
+#' Draw founder ages (days) from the stable age distribution.
+sample_founder_ages <- function(n, params, species) {
+  sad <- stable_age_distribution(params, species)
+  sample(sad$age, n, replace = TRUE, prob = sad$prop) + runif(n)
 }
