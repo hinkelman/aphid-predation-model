@@ -21,13 +21,17 @@ Pea aphids and bean aphids differ sharply as prey for *H. convergens* larvae:
   - After eating a single bean aphid, a larva handles prey for much longer,
     moves less, and stays on the plant longer.
 
-The question is how these differences create **indirect effects** between the
-aphid species through the predator:
+The question is how these differences shape **predator-mediated indirect
+effects** of bean aphids on pea aphids. Does the presence of bean aphids raise
+pea aphids' predation risk (shared doom) or lower it (associational refuge)?
+Several mechanisms could act:
 
-- **Short term:** handling, lethargy and leaving the plant change how much
-  predation each aphid species receives.
-- **Longer term:** slower development and higher mortality on bean aphids
-  change how much the predator eats over its life.
+- **Short term (behaviour):** long bean meals, lethargy afterwards, and staying
+  longer on plants after bean meals all change how the predator's time and
+  attention are divided between the prey.
+- **Longer term (predator performance):** slower development, higher mortality
+  and failed pupation on bean aphids change how much predation the larva
+  delivers over its life.
 
 ### Methods
 
@@ -109,44 +113,65 @@ each larva's own observed daily kills:
 ### Key results
 
 All four scenarios start with pea aphids on plant 1, where the larva hatches.
-Results are illustrative: several behavioural parameters have no direct data.
+The **predator's impact on pea aphids** is the reduction in pea aphid-days on
+plant 1 relative to the same scenario without a predator. The **benefit to
+pea aphids from bean aphids** compares that impact with the Pea | pea
+scenario, where the alternative prey is another pea colony; positive means
+bean aphids reduce pea aphids' predation. Results are illustrative: several
+behavioural parameters have no direct data.
 
-| Aphids on plant 1 \| plant 2 | Cut in pea aphid-days on plant 1 | Larvae pupating |
-|---|---|---|
-| Pea \| none | 33% | 60% |
-| Pea \| pea | 42% | 71% |
-| Pea \| bean | 32% | 65% |
-| Pea + bean \| none | −6% (pea *increase*) | 54% |
+| Aphids on plant 1 \| plant 2 | Predator impact on pea aphids | Benefit to pea from bean aphids | Larvae pupating | Days to pupation |
+|---|---|---|---|---|
+| Pea \| none | 33% | — | 60% | 13.7 |
+| Pea \| pea | 42% | (reference) | 71% | 14.0 |
+| Pea \| bean | 32% | +0.11 | 65% | 14.3 |
+| Pea + bean \| none | −6% (pea aphids *gain*) | +0.48 | 54% | 17.8 |
 
-(Experiment `analysis/05`, 100 runs per scenario.)
+(Experiment `analysis/05`, 100 runs per scenario. Sensitivity analysis
+`analysis/06`, 180 parameter sets.)
 
-1. **Bean aphids sharing the larva's plant protect pea aphids.** The larva
-   spreads its time and gut capacity across bean aphids. It also develops
-   more slowly: 17.8 days to pupation instead of about 14. And it frees room
-   for pea aphids by thinning the bean aphids that compete with them. This
-   result is the most robust one: the indirect effect is negative in 98% of
-   180 parameter sets (median −0.16).
-2. **Bean aphids on another plant have at most a weak effect.** A larva
-   seldom leaves a pea colony it is still exploiting, so it rarely meets bean
-   aphids elsewhere. The effect is slightly protective in 74% of parameter
-   sets, but small (median −0.02).
-3. **Timing matters.** One larva can strongly depress a pea colony only if it
-   arrives while the colony is small; with a 2-founder start, colonies
-   outgrew a larva hatching from about day 4. Hatch day is the
-   second-most influential parameter.
-4. **The predator's impact on pea aphids depends most on pea capture success**,
-   which is also the most poorly known parameter. It is the top-ranked
-   influence on suppression, both indirect effects and larval pupation.
+1. **Bean aphids on the larva's plant act as an associational refuge for pea
+   aphids.** They reduce pea aphids' predation in 98% of parameter sets (median
+   benefit +0.16; 10th–90th percentile +0.03 to +0.55). Three mechanisms
+   contribute:
+   - **Dilution and distraction (short term).** The larva spends search time,
+     handling time and gut capacity on easily caught bean aphids. Long,
+     lethargic bean meals take it out of action, and pea aphids eaten fall
+     from 192 to 161 per larva.
+   - **Reduced predator performance (longer term).** On a mixed diet the larva
+     develops more slowly (17.8 vs 14.0 days to pupation), spends longer in the
+     small, low-intake instars, and more larvae die or fail to pupate.
+   - **Predator-mediated competitive release.** The two aphids partly compete
+     for the plant. By eating bean aphids, the larva frees resources for pea
+     aphids, which can end up more numerous with the predator than without
+     it. The sensitivity analysis suggests this is a minor contributor: the
+     strength of competition between the aphids (α) had little influence.
+   - **Shared doom loses to the refuge.** Bean meals make larvae stay on a
+     plant longer, which keeps the predator near pea aphids. The model
+     includes this retention, but dilution and reduced predator performance
+     outweigh it.
+2. **Bean aphids on a neighbouring plant give at most a weak refuge.** Their
+   benefit to pea aphids is positive in 74% of parameter sets but small
+   (median +0.02). A larva seldom leaves a pea colony it is still exploiting,
+   so it rarely experiences both prey. In this model the spatial scale of the
+   indirect effect is set by predator movement, and it is mostly within a
+   plant.
+3. **The refuge is strongest when the predator is good at catching pea
+   aphids.** Pea capture success is the most influential parameter for every
+   output: it sets how much predation there is for bean aphids to divert.
    Bean-specific parameters (capture, colony packing, learning rate) barely
-   matter: the indirect effects depend on how well the larva exploits pea
-   aphids.
-5. **Consumption of bean aphids carries the costs seen in the lab:**
-   - slower development (bean food is worth about half as much, and less when
-     pea is also eaten);
-   - mortality concentrated in the first instar;
-   - failed pupation.
+   matter.
+4. **Timing matters.** One larva strongly depresses a pea colony only if it
+   arrives while the colony is small; hatch day is the second-most
+   influential parameter.
+5. **Consuming bean aphids carries the costs seen in the lab:**
+   - bean food is worth about half as much as pea, and less when pea is also
+     eaten;
+   - mortality concentrates in the first instar;
+   - pupation fails more often.
 
-   Lethargy after a bean meal reduces the larva's searching.
+   These costs drive the longer-term part of the refuge, through reduced
+   predator performance.
 6. **The 2005 and 2008 handling-time experiments disagreed** on how long larvae
    took to handle bean aphids (about 15–20 vs 70–130 min). The difference is
    mostly explained by starvation: 2008 larvae were starved for 2–24 h,
@@ -154,7 +179,8 @@ Results are illustrative: several behavioural parameters have no direct data.
 
 ### Main uncertainties
 
-- **Pea capture success per encounter.** The default is 0.1. The only
+- **Pea capture success per encounter**, the parameter that most strongly
+  scales the refuge. The default is 0.1. The only
   quantitative evidence comes from adult beetles, which consumed 1 of 72 pea
   aphids encountered in field arenas (Nelson & Rosenheim 2006).
 - **Colony packing densities.** There are no published values; the defaults
@@ -163,7 +189,9 @@ Results are illustrative: several behavioural parameters have no direct data.
 - **Aphid crowding parameters** (competition α, plant biomass, lag). ALMaSS
   values are field-scale.
 - **Model scope:**
-  - one larva only;
+  - one larva within one generation: there is no predator reproduction or
+    aggregation, so the model captures effects through the predator's
+    behaviour and individual performance, not changes in predator numbers;
   - no cannibalism or intraguild predation;
   - no non-lethal effects of disturbance on pea aphids (dropping costs
     feeding time);

@@ -132,19 +132,19 @@ p_focal <- census |>
   theme_model()
 ggsave("output/figures/exp_focal_pea.png", p_focal, width = 10, height = 4, dpi = 200)
 
-# Suppression: 1 - (pea aphid-days on plant 1 with predator) / (mean without),
-# per run with a predator, over the whole run.
+# Predator impact on pea aphids: 1 - (pea aphid-days on plant 1 with the
+# predator) / (mean without), per run with a predator, over the whole run.
 aphid_days <- census |>
   filter(plant == 1, species == "pea") |>
   summarise(aphid_days = sum(n), .by = c(scenario, predator, rep))
 
-suppression <- aphid_days |>
+impact <- aphid_days |>
   filter(predator) |>
   left_join(
     aphid_days |> filter(!predator) |> summarise(baseline = mean(aphid_days), .by = scenario),
     by = "scenario"
   ) |>
-  mutate(suppression = 1 - aphid_days / baseline)
+  mutate(impact = 1 - aphid_days / baseline)
 
 predator_outcomes <- experiment |>
   filter(predator) |>
@@ -159,11 +159,14 @@ predator_outcomes <- experiment |>
   unnest(out) |>
   mutate(scenario = factor(scenario, levels = scenarios$scenario))
 
-summary_table <- suppression |>
+# Benefit to pea aphids from bean aphids: the predator's impact on pea aphids
+# with pea aphids as the alternative (Pea | pea) minus its impact with bean
+# aphids present; > 0 means bean aphids benefit pea aphids.
+summary_table <- impact |>
   left_join(predator_outcomes, by = c("scenario", "rep")) |>
   summarise(
-    suppression_se = sd(suppression) / sqrt(n()),
-    suppression = mean(suppression),
+    impact_se = sd(impact) / sqrt(n()),
+    impact = mean(impact),
     pupated = mean(fate == "pupated"),
     died = mean(fate %in% c("died", "starved", "failed_pupation")),
     pupation_day = median(fate_day[fate == "pupated"]),
@@ -171,23 +174,24 @@ summary_table <- suppression |>
     bean_eaten = mean(bean_eaten),
     .by = scenario
   ) |>
-  arrange(scenario)
+  arrange(scenario) |>
+  mutate(bean_benefit_vs_pea = if_else(grepl("bean", scenario), impact[scenario == "Pea | pea"] - impact, NA_real_))
 summary_table
 
-p_suppression <- suppression |>
-  ggplot(aes(scenario, suppression)) +
+p_impact <- impact |>
+  ggplot(aes(scenario, impact)) +
   geom_hline(yintercept = 0, colour = "grey70") +
   geom_violin(fill = species_colours[["pea"]], colour = NA, alpha = 0.2) +
   stat_summary(fun.data = \(x) mean_se(x, mult = 1.96), colour = species_colours[["pea"]], size = 0.4) +
   scale_y_continuous(labels = scales::label_percent()) +
   labs(
     x = "Aphid species on plant 1 | plant 2", y = "Reduction in pea aphid-days on plant 1",
-    title = "How much one larva suppresses pea aphids on its starting plant",
-    subtitle = sprintf("Over %d days, relative to the same scenario without a predator\nPoint: mean ± 95%% CI; shape: distribution across runs", run_days)
+    title = "Predator impact on pea aphids on its starting plant",
+    subtitle = sprintf("Over %d days, relative to the same scenario without a predator; below 0, pea aphids gain\nPoint: mean ± 95%% CI; shape: distribution across runs", run_days)
   ) +
   theme_model()
-ggsave("output/figures/exp_suppression.png", p_suppression, width = 7, height = 4.5, dpi = 200)
+ggsave("output/figures/exp_predator_impact.png", p_impact, width = 7, height = 4.5, dpi = 200)
 
-saveRDS(list(census = census, suppression = suppression, predator = predator_outcomes,
+saveRDS(list(census = census, impact = impact, predator = predator_outcomes,
              summary = summary_table, params = params),
         "output/params/two_plant_experiment.rds")

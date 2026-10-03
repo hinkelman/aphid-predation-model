@@ -1,6 +1,6 @@
 # Sensitivity analysis of free parameters (Morris screening) ---------------
 #
-# Which free (unmeasured) parameters drive the predator's suppression of pea
+# Which free (unmeasured) parameters drive the predator's impact on pea
 # aphids and the indirect effects of bean aphids on pea aphids?
 #
 # Scenarios (two fava plants; aphids on plant 1 | plant 2, 10 mixed-age founders
@@ -10,9 +10,12 @@
 #   pb  = Pea | bean
 #   mix = Pea + bean | none
 # Outputs per parameter set (means over replicate runs):
-#   supp_*    1 - pea aphid-days on plant 1 with predator / without
-#   ie_separate = supp_pb - supp_pp   (bean vs pea aphids on the other plant)
-#   ie_shared   = supp_mix - supp_pp  (bean aphids on the same plant; includes
+#   impact_*  predator impact on pea aphids: 1 - pea aphid-days on plant 1
+#             with predator / without
+#   bean_benefit_other = impact_pp - impact_pb (bean vs pea aphids on the
+#             other plant); > 0: bean aphids benefit pea aphids
+#   bean_benefit_same  = impact_pp - impact_mix (bean aphids on the same
+#             plant; > 0: bean aphids benefit pea aphids; includes
 #                                      competition between aphid species)
 #   pupate_*  proportion of larvae pupating
 #
@@ -131,15 +134,15 @@ set_outputs <- design |>
   unnest(runs) |>
   left_join(baselines, by = c("plant_biomass", "competition_alpha", "density_lag", "scenario")) |>
   summarise(
-    supp = 1 - mean(pea_days) / first(baseline),
+    impact = 1 - mean(pea_days) / first(baseline),
     pupate = mean(fate == "pupated"),
     .by = c(set, scenario)
   ) |>
-  pivot_wider(names_from = scenario, values_from = c(supp, pupate)) |>
-  mutate(ie_separate = supp_pb - supp_pp, ie_shared = supp_mix - supp_pp) |>
+  pivot_wider(names_from = scenario, values_from = c(impact, pupate)) |>
+  mutate(bean_benefit_other = impact_pp - impact_pb, bean_benefit_same = impact_pp - impact_mix) |>
   arrange(set)
 
-outputs <- c("supp_pp", "supp_pb", "supp_mix", "ie_separate", "ie_shared",
+outputs <- c("impact_pp", "impact_pb", "impact_mix", "bean_benefit_other", "bean_benefit_same",
              "pupate_pp", "pupate_pb", "pupate_mix")
 stopifnot(!anyNA(set_outputs[outputs]))
 tell(mo, as.matrix(set_outputs[outputs]))
@@ -148,16 +151,16 @@ results <- design |> left_join(set_outputs, by = "set")
 saveRDS(list(morris = mo, results = results, effects = effects), file.path(out_dir, "morris.rds"))
 
 effects |>
-  filter(output %in% c("supp_pp", "ie_separate", "ie_shared")) |>
+  filter(output %in% c("impact_pp", "bean_benefit_other", "bean_benefit_same")) |>
   arrange(output, desc(mu_star)) |>
   print(n = 30)
 
 # Figures ---------------------------------------------------------------------
 
 output_labels <- c(
-  supp_pp = "Suppression: Pea | pea", supp_pb = "Suppression: Pea | bean",
-  supp_mix = "Suppression: Pea + bean | none",
-  ie_separate = "Indirect effect: bean on other plant", ie_shared = "Indirect effect: bean on same plant",
+  impact_pp = "Predator impact on pea: Pea | pea", impact_pb = "Predator impact on pea: Pea | bean",
+  impact_mix = "Predator impact on pea: Pea + bean | none",
+  bean_benefit_other = "Benefit to pea: bean on other plant", bean_benefit_same = "Benefit to pea: bean on same plant",
   pupate_pp = "Pupation: Pea | pea", pupate_pb = "Pupation: Pea | bean", pupate_mix = "Pupation: Pea + bean | none"
 )
 factor_labels <- c(
@@ -173,9 +176,9 @@ factor_labels <- c(
 )
 
 p_rank <- effects |>
-  filter(output %in% c("supp_pp", "ie_separate", "ie_shared", "pupate_pb")) |>
+  filter(output %in% c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb")) |>
   mutate(
-    output = factor(output, levels = c("supp_pp", "ie_separate", "ie_shared", "pupate_pb"), labels = output_labels[c("supp_pp", "ie_separate", "ie_shared", "pupate_pb")]),
+    output = factor(output, levels = c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb"), labels = output_labels[c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb")]),
     # order factors by mu_star within each facet
     factor = reorder(paste(factor_labels[factor], output, sep = "___"), mu_star)
   ) |>
@@ -195,7 +198,7 @@ fig_dir <- if (out_dir == "output/sensitivity") "output/figures" else out_dir
 ggsave(file.path(fig_dir, "sens_morris_ranking.png"), p_rank, width = 13, height = 4.5, dpi = 200)
 
 p_spread <- results |>
-  select(set, all_of(c("supp_pp", "ie_separate", "ie_shared", "pupate_pp", "pupate_pb", "pupate_mix"))) |>
+  select(set, all_of(c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pp", "pupate_pb", "pupate_mix"))) |>
   distinct() |>
   pivot_longer(-set, names_to = "output") |>
   mutate(output = factor(output, levels = names(output_labels), labels = output_labels)) |>
@@ -205,7 +208,7 @@ p_spread <- results |>
   labs(
     x = "Value across the 100 parameter sets", y = NULL,
     title = "Range of outcomes across free-parameter space",
-    subtitle = "Indirect effect < 0: bean aphids reduce how much the larva suppresses pea aphids on plant 1"
+    subtitle = "Benefit to pea > 0: bean aphids reduce the larva's impact on pea aphids on plant 1"
   ) +
   theme_model()
 ggsave(file.path(fig_dir, "sens_output_spread.png"), p_spread, width = 8, height = 4.5, dpi = 200)

@@ -128,7 +128,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - Separately, **bean handling time vs vial kill rates**: bean-diet L4s killed ~25 bean aphids/day. At the 2008 handling times (~70+ min each) that would take more than 24 h a day; the 2005 handling times (~15–20 min) fit easily. Larvae with repeated bean experience may handle bean faster than the pea-reared larvae in the 2008 trials.
 
 #### Known issues with the behavior parameters
-- **Bean handling differs between years — mostly a starvation effect.** At matched starvation (≤ 4.5 h, the 2005 range), 2008 bean handling has a median of 52 min (IQR 40–70, n = 7), against 20 min (IQR 11–51, n = 31) in 2005 for adult-sized bean aphids. Across all 2008 trials (2–24 h) the median is 126 min. So most of the apparent conflict came from comparing hungrier 2008 larvae with recently fed 2005 larvae. The 2008 model captures the effect through its aphid × starvation term. The remaining ~2.6× gap rests on 7 low-starvation 2008 trials.
+- **Bean handling differs between years — mostly a starvation effect.** At matched starvation (≤ 4.5 h, the 2005 range), 2008 bean handling has a median of 52 min (IQR 40–70, n = 7), against 20 min (IQR 11–51, n = 31) in 2005 for adult-sized bean aphids. Across all 2008 trials (2–24 h) the median is 126 min. So most of the conflict came from comparing hungrier 2008 larvae with recently fed 2005 larvae. The 2008 model captures the effect through its aphid × starvation term. The remaining ~2.6× gap rests on 7 low-starvation 2008 trials.
 - (Earlier note) **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
 - Behavior data come only from 4th instars. Handling for earlier instars needs a scaling assumption (to be set when development is modeled).
 
@@ -180,7 +180,12 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Method**: Morris elementary-effects screening with `sensitivity::morris()`: 4 levels, grid jump 2. Effects are scaled by factor range (`scale = TRUE`). Factors with wide ranges are sampled on a log10 scale.
 - **Factors and ranges** (17; `free_parameter_ranges()`): detection width 2–5 mm; plant area 400–1,600 cm² (log); colony minimum area 2–40 cm² (log); colony packing pea 3–17 and bean 10–35 mg/cm² (log); prey size limit 1–4 (log); capture pea 0.02–0.3 (log); capture bean 0.5–1.0; leave-time scaling ×0.25–4 (log); path between plants 0.45–1.8 m (log); digestion 2–8/day (log); bean learning 5–100 meals (log); starvation tolerance ×0.5–2 (log); plant biomass 10–40 g (log); competition α 0–1; density lag 0–3 d (whole days); hatch day 2–5. 10 trajectories → 180 parameter sets.
 - **Scenarios** (35 days; 10 mixed-age founders per colony; larva hatches on plant 1 on the hatch-day factor): Pea | pea, Pea | bean, Pea + bean | none. 20 replicate runs each per parameter set, with common random numbers (seeds depend only on scenario and replicate). No-predator baselines depend only on plant biomass, α and density lag, and are run once per combination in the design (20 runs each).
-- **Outputs**: suppression of pea aphid-days on plant 1 in each scenario; indirect effects ie_separate = supp(Pea | bean) − supp(Pea | pea) and ie_shared = supp(Pea + bean | none) − supp(Pea | pea), the latter including direct competition; pupation probability in each scenario.
+- **Outputs**:
+  - **predator impact on pea aphids** in each scenario (`impact_*`): 1 − pea aphid-days on plant 1 with the predator ÷ without;
+  - **benefit to pea aphids from bean aphids** (positive = bean aphids reduce pea aphids' predation, i.e. an associational refuge; negative = shared doom):
+    - `bean_benefit_other` = impact(Pea | pea) − impact(Pea | bean);
+    - `bean_benefit_same` = impact(Pea | pea) − impact(Pea + bean | none), which also includes predator-mediated competitive release;
+  - pupation probability in each scenario (`pupate_*`).
 
 ## Repository layout
 ```
