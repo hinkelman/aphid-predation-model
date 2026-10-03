@@ -276,16 +276,19 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   search_area <- function() p$speed * pr$activity * p$detection_width * size_scale[[pr$stage]]
   plant_area_mm2 <- p$plant_area * 100
 
-  # Aphid aggregation. Aphids live in colonies whose area grows with aphid
-  # density (adult-mass equivalents, both species): colony area =
-  # colony_min_area + density / colony_density, capped at the plant area. A
+  # Aphid aggregation. Aphids live in colonies whose area grows with their
+  # numbers: colony area = colony_min_area + sum over species of (count x
+  # adult mass) / colony_packing[species], capped at the plant area (bean
+  # aphids pack densely, pea aphids loosely). A
   # larva that has found the colony (hatched beside it, or has eaten on this
   # plant - area-restricted search after a meal) searches only the colony
   # area; on arriving at a plant it searches the whole plant until it eats.
   search_space_mm2 <- function() {
     if (!pr$in_colony) return(plant_area_mm2)
-    density <- N[pr$plant, 1L] * m_adult[1L] + N[pr$plant, 2L] * m_adult[2L]
-    min(p$plant_area, p$colony_min_area + density / p$colony_density) * 100
+    colony <- p$colony_min_area +
+      N[pr$plant, 1L] * m_adult[1L] / p$colony_packing[["pea"]] +
+      N[pr$plant, 2L] * m_adult[2L] / p$colony_packing[["bean"]]
+    min(p$plant_area, colony) * 100
   }
 
   # Encounters: the larva meets aphids on its plant at random, at rate

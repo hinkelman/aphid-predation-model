@@ -16,8 +16,8 @@
 #                                      competition between aphid species)
 #   pupate_*  proportion of larvae pupating
 #
-# Morris screening with sensitivity::morris(): 16 factors, 4 levels, grid jump
-# 2, 10 trajectories = 170 parameter sets. Log-range factors are sampled on a
+# Morris screening with sensitivity::morris(): 17 factors, 4 levels, grid jump
+# 2, 10 trajectories = 180 parameter sets. Log-range factors are sampled on a
 # log10 scale; elementary effects are scaled by factor range (scale = TRUE).
 # 20 replicate runs per scenario per set, with common random numbers (same
 # seeds in every set). Results are cached per set in output/sensitivity/, so
@@ -162,7 +162,8 @@ output_labels <- c(
 )
 factor_labels <- c(
   detection_width = "Detection width", plant_area = "Plant area",
-  colony_min_area = "Colony minimum area", colony_density = "Colony packing density",
+  colony_min_area = "Colony minimum area", packing_pea = "Colony packing: pea",
+  packing_bean = "Colony packing: bean",
   prey_size_ratio = "Prey size limit", capture_pea = "Capture: pea", capture_bean = "Capture: bean",
   leave_scaling = "Leave-time scaling", plant_path = "Path between plants",
   digestion_rate = "Digestion rate", learn_meals = "Bean learning (meals)",

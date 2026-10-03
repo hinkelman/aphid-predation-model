@@ -91,12 +91,18 @@ default_params <- function(param_dir = "output/params") {
     # leave_scaling (assumption; 1 = proportional to area). With no meal on
     # the current plant, the pea post-handling model at current hunger applies.
     trial_leaf_area = mov$leaf_area,
-    # Aphid aggregation (assumptions): colony area (cm^2) = colony_min_area +
-    # aphid density (mg adult-mass equivalents) / colony_density (mg/cm^2),
-    # capped at plant_area. 10 cm^2 ~ a growing tip or one leaflet underside;
-    # 4 mg/cm^2 ~ 1 pea or ~4.4 bean aphids per cm^2.
+    # Aphid aggregation: colony area (cm^2) = colony_min_area + sum over
+    # species of (count x adult mass) / colony_packing (mg/cm^2), capped at
+    # plant_area. 10 cm^2 ~ a growing tip or one leaflet underside (assumed).
+    # Packing: no published per-area colony densities. Body footprints (pea
+    # ~3.5 x 1.6 mm, bean ~2 x 1.2 mm) cap touching adults at ~68 and ~37
+    # mg/cm^2. Bean aphids form dense colonies on stems and shoot tips; pea
+    # aphids form loose colonies, aggregating within ~1-3 body lengths
+    # (Social aggregation in pea aphids, PMC3869777) and dispersing from the
+    # colony as late nymphs. Defaults: pea 8 mg/cm^2 (~2 aphids/cm^2), bean
+    # 20 mg/cm^2 (~22 aphids/cm^2).
     colony_min_area = 10,
-    colony_density = 4,
+    colony_packing = c(pea = 8, bean = 20),
     leave_scaling = 1,
     # Plants are separate: walk down one plant, across soil, up the other.
     # Travel time = path / (speed x activity).

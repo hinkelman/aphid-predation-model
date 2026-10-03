@@ -11,7 +11,8 @@ free_parameter_ranges <- function() {
     "detection_width",    2,      5,      FALSE, # mm, L4
     "plant_area",         400,    1600,   TRUE,  # cm^2 searchable surface
     "colony_min_area",    2,      40,     TRUE,  # cm^2
-    "colony_density",     1,      10,     TRUE,  # mg aphid per cm^2 of colony
+    "packing_pea",        3,      17,     TRUE,  # mg/cm^2 in pea colonies (~1-4 aphids/cm^2)
+    "packing_bean",       10,     35,     TRUE,  # mg/cm^2 in bean colonies (~10-40 aphids/cm^2)
     "prey_size_ratio",    1,      4,      TRUE,  # prey vs larval length scale
     "capture_pea",        0.02,   0.3,    TRUE,  # ~1/72 for adults on alfalfa
     "capture_bean",       0.5,    1.0,    FALSE,
@@ -45,12 +46,14 @@ design_values <- function(x, ranges = free_parameter_ranges()) {
 #' scenario setting, applied by the caller.
 apply_factors <- function(params, values) {
   v <- as.list(values)
-  direct <- c("detection_width", "plant_area", "colony_min_area", "colony_density",
+  direct <- c("detection_width", "plant_area", "colony_min_area",
               "prey_size_ratio", "leave_scaling", "plant_path", "digestion_rate",
               "learn_meals", "plant_biomass", "competition_alpha")
   for (nm in intersect(names(v), direct)) params[[nm]] <- v[[nm]]
   if (!is.null(v$density_lag)) params$density_lag <- as.integer(round(v$density_lag))
   if (!is.null(v$capture_pea)) params$capture[["pea"]] <- v$capture_pea
+  if (!is.null(v$packing_pea)) params$colony_packing[["pea"]] <- v$packing_pea
+  if (!is.null(v$packing_bean)) params$colony_packing[["bean"]] <- v$packing_bean
   if (!is.null(v$capture_bean)) params$capture[["bean"]] <- v$capture_bean
   if (!is.null(v$starvation_scale)) params$starvation_median <- params$starvation_median * v$starvation_scale
   params
