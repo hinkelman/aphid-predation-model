@@ -102,12 +102,14 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     a_sp[i] <<- species; a_plant[i] <<- plant; a_birth[i] <<- birth_time
     a_fec[i] <<- rgamma(1, shape = frailty_shape[[species]], rate = frailty_shape[[species]])
     a_alive[i] <<- TRUE
+    if (is.finite(capacity)) update_dbar(plant)
     N[plant, species] <<- N[plant, species] + 1L
     schedule_aphid(i)
     i
   }
 
   remove_aphid <- function(i) {
+    if (is.finite(capacity)) update_dbar(a_plant[i])
     a_alive[i] <<- FALSE
     a_next[i] <<- Inf
     N[a_plant[i], a_sp[i]] <<- N[a_plant[i], a_sp[i]] - 1L
@@ -128,18 +130,28 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   }
 
   # Density dependence: births are thinned with probability
-  # g(D) = max(0, 1 - D / K), where D is aphid density on the plant in
-  # adult-mass equivalents (mg): each aphid counts its species' adult mass,
-  # both species combined. Counting newborns at full weight avoids a growth
-  # lag (overshoot, then a generation with no births and a senescent crash).
-  # Exact thinning because g <= 1 and the unthinned birth process is each
-  # aphid's own CIF.
+  # g = max(0, 1 - Dbar / K). D is aphid density on the plant in adult-mass
+  # equivalents (mg): each aphid counts its species' adult mass, both species
+  # combined (counting newborns at full weight avoids a growth lag). Dbar is an
+  # exponentially weighted average of D over the past ~density_lag days, so
+  # crowding acts with a delay and losses (e.g. to the predator) are not
+  # replaced instantly. D is constant between events, so Dbar is updated
+  # exactly: Dbar <- D + (Dbar - D) exp(-dt / lag). Exact thinning because
+  # g <= 1 and the unthinned birth process is each aphid's own CIF.
   m_adult <- unname(setNames(p$mass$mass_adult, as.character(p$mass$aphid))[species_names])
   capacity <- p$aphid_capacity
+  lag <- p$density_lag * minutes_per_day
+  dbar <- c(0, 0); t_dbar <- c(0, 0)
+  density_now <- function(plant) N[plant, 1L] * m_adult[1L] + N[plant, 2L] * m_adult[2L]
+  update_dbar <- function(plant) {
+    if (lag <= 0) { dbar[plant] <<- density_now(plant); return(invisible()) }
+    dbar[plant] <<- density_now(plant) + (dbar[plant] - density_now(plant)) * exp(-(t - t_dbar[plant]) / lag)
+    t_dbar[plant] <<- t
+  }
   birth_succeeds <- function(plant) {
     if (!is.finite(capacity)) return(TRUE)
-    density <- N[plant, 1L] * m_adult[1L] + N[plant, 2L] * m_adult[2L]
-    runif(1) < 1 - density / capacity # FALSE whenever density >= capacity
+    update_dbar(plant)
+    runif(1) < 1 - dbar[plant] / capacity # FALSE whenever Dbar >= capacity
   }
 
   # initial aphids

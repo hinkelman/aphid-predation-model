@@ -79,10 +79,12 @@ default_params <- function(param_dir = "output/params") {
     # Body length by instar (mm): L1 1.9 and L4 7.0 (taxonomic description),
     # L2-L3 interpolated geometrically.
     larva_length = c(L1 = 1.9, L2 = 2.95, L3 = 4.57, L4 = 7.0),
-    # Searchable plant surface (cm^2): a large fava plant (~6 weeks, ~50 cm,
-    # 10-12 compound leaves, ~1200 cm^2 leaf area per side) - both leaf
-    # surfaces plus stem.
-    plant_area = 2500,
+    # Searchable plant surface (cm^2): a medium fava plant (~3-4 weeks, ~30
+    # cm, 5-6 compound leaves, ~380 cm^2 leaf area per side) - both leaf
+    # surfaces plus stem. Chosen so one larva can deplete a young colony and
+    # give up on the plant within its larval life (a 1200-2500 cm^2 plant
+    # takes days to give up on).
+    plant_area = 800,
     # Leaving a plant: post-handling (leaf-leaving) times were measured on a
     # single leaf of trial_leaf_area cm^2; on a plant the larva moves on to
     # other leaves, so times scale by plant_area / trial_leaf_area x
@@ -98,7 +100,7 @@ default_params <- function(param_dir = "output/params") {
     leave_scaling = 1,
     # Plants are separate: walk down one plant, across soil, up the other.
     # Travel time = path / (speed x activity).
-    plant_path = 1200, # mm (~50 cm down, ~20 cm across, ~50 cm up)
+    plant_path = 900, # mm (~30 cm down, ~30 cm across, ~30 cm up)
     capture = c(pea = 0.3, bean = 0.8), # pea aphids drop off; bean rarely do
     # Prey size vs larval size (assumptions): capture is multiplied by
     # 1 / (1 + (prey length / (prey_size_ratio x larval length))^size_steepness);
@@ -115,9 +117,14 @@ default_params <- function(param_dir = "output/params") {
     # Aphid carrying capacity per plant, in mg of adult-mass equivalents
     # (each aphid counts its species' adult mass; both species combined).
     # Births are thinned by max(0, 1 - density / capacity); Inf turns density
-    # dependence off. Scaled to the large plant: ~2 mg per cm^2 of searchable
-    # surface; 5000 mg ~ 1300 pea or ~5500 bean aphids.
-    aphid_capacity = 5000,
+    # dependence off. ~2 mg per cm^2 of searchable surface: 1600 mg ~ 420 pea
+    # or ~1780 bean aphids.
+    aphid_capacity = 1600,
+    # Crowding acts with a delay: births are thinned by the density averaged
+    # (exponentially weighted) over the past ~density_lag days, so losses are
+    # not replaced instantly (assumption; 0 = instantaneous). Lags >= 2 days
+    # give overshoot and boom-bust cycles without predators.
+    density_lag = 1,
     # Gut: digestion rate (per day); gut capacity is set so the ad lib kill
     # rate (max_intake) is reached (see simulate_two_plants()).
     digestion_rate = 4,

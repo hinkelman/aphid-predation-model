@@ -9,18 +9,20 @@ free_parameter_ranges <- function() {
   tibble::tribble(
     ~factor,              ~low,   ~high,  ~log,
     "detection_width",    2,      5,      FALSE, # mm, L4
-    "plant_area",         1000,   5000,   TRUE,  # cm^2 searchable surface
+    "plant_area",         400,    1600,   TRUE,  # cm^2 searchable surface
     "colony_min_area",    2,      40,     TRUE,  # cm^2
     "colony_density",     1,      10,     TRUE,  # mg aphid per cm^2 of colony
     "prey_size_ratio",    1,      4,      TRUE,  # prey vs larval length scale
     "capture_pea",        0.1,    0.6,    FALSE,
     "capture_bean",       0.5,    1.0,    FALSE,
     "leave_scaling",      0.25,   4,      TRUE,  # multiplier on area-scaled leave times
-    "plant_path",         600,    2400,   TRUE,  # mm between plants
+    "plant_path",         450,    1800,   TRUE,  # mm between plants
     "digestion_rate",     2,      8,      TRUE,  # per day
     "learn_meals",        5,      100,    TRUE,
     "starvation_scale",   0.5,    2,      TRUE,  # multiplier on starvation medians
-    "aphid_capacity",     2500,   10000,  TRUE   # mg adult-mass equivalents
+    "aphid_capacity",     800,    3200,   TRUE,  # mg adult-mass equivalents
+    "density_lag",        0.5,    2,      TRUE,  # days
+    "hatch_day",          2,      5,      FALSE  # day the larva hatches (scenario)
   )
 }
 
@@ -38,12 +40,13 @@ design_values <- function(x, ranges = free_parameter_ranges()) {
   setNames(ifelse(ranges$log, 10^x, x), ranges$factor)
 }
 
-#' Apply factor values (natural units) to a parameter list.
+#' Apply factor values (natural units) to a parameter list. `hatch_day` is a
+#' scenario setting, applied by the caller.
 apply_factors <- function(params, values) {
   v <- as.list(values)
   direct <- c("detection_width", "plant_area", "colony_min_area", "colony_density",
               "prey_size_ratio", "leave_scaling", "plant_path", "digestion_rate",
-              "learn_meals", "aphid_capacity")
+              "learn_meals", "aphid_capacity", "density_lag")
   for (nm in intersect(names(v), direct)) params[[nm]] <- v[[nm]]
   if (!is.null(v$capture_pea)) params$capture[["pea"]] <- v$capture_pea
   if (!is.null(v$capture_bean)) params$capture[["bean"]] <- v$capture_bean

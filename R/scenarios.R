@@ -30,12 +30,12 @@ vial_params <- function(params) {
 #'   c(pea = 2, bean = 0). Small founding colonies leave the aphids room to
 #'   grow on the large default plant before reaching capacity.
 #' @param predator TRUE to add one L1 larva on `predator_plant` at
-#'   `predator_day`. The default (day 7) lets the founding colony establish
-#'   first, as ladybirds lay eggs at established colonies; a hatchling beside
-#'   2 founding adults mostly starves.
+#'   `predator_day`. Default day 3: the colony (2 founders) has ~20 aphids, a
+#'   hatchling can survive, and one larva can still depress or deplete it
+#'   (from day 4-5 the colony outgrows a single larva).
 #' @param adult_age age (days) of the initial adults
 two_plant_scenario <- function(plant1, plant2, predator = TRUE, predator_plant = 1L,
-                               predator_day = 7, run_days = 35, adult_age = 8) {
+                               predator_day = 3, run_days = 35, adult_age = 8) {
   aphids <- dplyr::bind_rows(
     tibble::tibble(plant = 1L, species = names(plant1), n = unname(plant1)),
     tibble::tibble(plant = 2L, species = names(plant2), n = unname(plant2))

@@ -2,13 +2,13 @@
 #
 # One plant species (two fava plants), two aphid species (pea, bean), one
 # predator (a single Hippodamia convergens larva). Aphid density dependence:
-# births thinned by max(0, 1 - density / capacity), density in adult-mass
-# equivalents per plant (both species combined).
+# births thinned by max(0, 1 - Dbar / capacity), Dbar = density in adult-mass
+# equivalents per plant (both species combined) averaged over ~1 day.
 #
 # 1. Aphid dynamics without predators: plateaus and competition on a shared
 #    plant.
 # 2. Indirect effects of bean aphids on pea aphids via the predator: the
-#    larva hatches on day 7 as an L1 on plant 1, which always holds pea aphids; what is
+#    larva hatches on day 3 as an L1 on plant 1, which always holds pea aphids; what is
 #    on plant 2, or alongside the pea aphids on plant 1, varies. Effects are
 #    measured against the same scenario without the predator.
 #
@@ -131,7 +131,7 @@ p_focal <- census |>
   labs(
     x = "Day", y = "Pea aphids on plant 1", linetype = NULL,
     title = "Pea aphids on the predator's starting plant",
-    subtitle = sprintf("Two fava plants. Panels: aphid species on plant 1 | plant 2 (2 founding adults each; larva added on day 7). Median and IQR of %d runs", reps)
+    subtitle = sprintf("Two fava plants. Panels: aphid species on plant 1 | plant 2 (2 founding adults each; larva hatches on day 3). Median and IQR of %d runs", reps)
   ) +
   theme_model()
 ggsave("output/figures/exp_focal_pea.png", p_focal, width = 10, height = 4, dpi = 200)
