@@ -221,6 +221,22 @@ tracked). Scripts 05 and 06 reuse cached simulations. Delete
 `output/params/two_plant_experiment_runs.rds` or `output/sensitivity/` to
 rerun them after changing the model.
 
+## Tests
+
+The test suite (testthat) takes about 15 seconds and does not need
+`output/`:
+
+```bash
+Rscript tests/run_tests.R
+```
+
+It checks the data readers, small model helpers, and simulation invariants.
+Regression tests compare seeded simulations, parameters refitted from
+`data/`, and vial-larvae runs with `tests/testthat/reference.rds`. After a
+deliberate model or fitting change, rerun the analysis scripts, regenerate
+the reference with `Rscript tests/update_reference.R`, and commit it with
+the change.
+
 ## Repository layout
 
 ```
@@ -228,4 +244,5 @@ R/          data import, model fits, samplers, simulation engine, scenarios, sen
 analysis/   numbered scripts: fit, calibrate, validate, experiment, sensitivity
 data/       raw data from the 2005–2010 experiments (read-only)
 docs/       model design document: data interpretation, decisions, sources
+tests/      testthat suite and its regression reference
 ```
