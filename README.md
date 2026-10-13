@@ -47,7 +47,7 @@ author's dissertation (Ch. 1–2):
 
 All predator experiments used size-matched prey and pea-reared larvae.
 
-**Aphids** (`R/aphid_*.R`):
+**Aphids** (`R/aphid_*.R`; crowding is in `R/simulation.R`):
 
 - Lifespans follow a Weibull distribution; at each event, the remaining
   lifespan is drawn given the aphid's current age.
@@ -202,8 +202,9 @@ Details, decisions and sources are in [docs/model-design.md](docs/model-design.m
 
 ## Running the analyses
 
-Requires R ≥ 4.4 with dplyr, tidyr, ggplot2, purrr, readxl, janitor, survival,
-MASS and sensitivity. Run the scripts with `Rscript` from the project root.
+Requires R ≥ 4.4 with dplyr, tidyr, ggplot2, purrr, tibble, readr, readxl,
+janitor, scales, survival, MASS and sensitivity; the tests also need testthat
+and withr. Run the scripts with `Rscript` from the project root.
 Scripts 04–06 fork with `parallel::mclapply()`, which IDE consoles such as
 Positron may block.
 
@@ -212,8 +213,8 @@ Rscript analysis/01_aphid_demography.R       # aphid lifespan, births, frailty
 Rscript analysis/02_predator_behavior.R      # handling, leaving, movement, aphid mass
 Rscript analysis/03_predator_development.R   # thresholds, mortality, pupation (~1 min)
 Rscript analysis/04_simulation_calibration.R # experienced bean handling; vial validation
-Rscript analysis/05_two_plant_experiment.R   # two-plant experiment (~5 min)
-Rscript analysis/06_sensitivity.R            # Morris sensitivity analysis (~1 h)
+Rscript analysis/05_two_plant_experiment.R   # two-plant experiment (~15 min)
+Rscript analysis/06_sensitivity.R            # Morris sensitivity analysis (~40 min)
 ```
 
 Fitted parameters, cached runs and figures are written to `output/` (not

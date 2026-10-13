@@ -17,11 +17,11 @@ Two pathways are of interest:
 | Topic | Decision |
 |---|---|
 | Model type | Continuous-time discrete-event simulation (DES), individual-based, clock in minutes |
-| System | **One plant species (fava bean, *Vicia faba*), two aphid species (pea and bean aphid), one predator species (*Hippodamia convergens*).** Two fava plants, identical as hosts; both aphid species can occur on either plant, and the initial composition is a scenario setting. Phrases like "pea plant" mean "the fava plant holding pea aphids". |
+| System | **One plant species (fava bean, *Vicia faba*), two aphid species (pea and bean aphid), one predator species (*Hippodamia convergens*).** Two fava plants, identical as hosts; both aphid species can occur on either plant, and the initial composition is a scenario setting. Avoid "pea plant" or "bean plant"; label plants by the aphids on them (e.g. "plant 1: pea aphids"). |
 | Predators | One larva per run |
 | Predator development | Dynamic: L1 → L4 → pupation, driven by what it eats |
 | Run end | Predator pupates or dies, then the run continues to a fixed length so aphid dynamics play out |
-| Run length | Several weeks (default experiment: 40 days). **Aphid density dependence** added 2026-10-02 (see Aphid processes) |
+| Run length | Several weeks (default experiment: 35 days). **Aphid density dependence** added 2026-10-02 (see Aphid processes) |
 | Encounter rate | No data. Free parameter; explore by sensitivity analysis or use literature values for *H. convergens* |
 | Code style | Modern R: dplyr, tidyr, ggplot2 |
 
@@ -80,7 +80,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 
 ### Entities and state
 - **Plant** (`1`, `2`): the aphids on it.
-- **Aphid**: id, species, plant, birth time, next event (birth or death) and its time.
+- **Aphid**: id, species, plant, birth time, winged or not, next event (birth, death, crowding death, or emigration of a winged adult) and its time.
 - **Predator**: stage (L1–L4), accumulated food value, gut / time since last meal, current plant, current behavioral state.
 
 ### Aphid processes (as in the 2011 NetLogo model, `GrowthDevelopment0.2.nlogo`)
@@ -97,18 +97,17 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
   - **Lag 1 day**, not ALMaSS's 4: on one plant, with growth ~0.38/day, lags of 2–4 days gave boom-bust cycles (pea 40 ↔ 1,700). ALMaSS works on 10 × 10 m field cells with background mortality. With a 1-day lag, colonies level off (pea alone ~600, bean alone ~400 on a 20 g plant) with no late decline.
   - **Plant biomass** 20 g fresh: ~370 cm² leaf area per side ÷ specific leaf area 25.7 mm²/mg ≈ 1.4 g dry leaf, plus stem, at ~90% water.
   - Replaced earlier versions: births-only thinning against a carrying capacity, without and then with a 1-day averaged lag. A colony at capacity replaced losses almost instantly and then cycled once its age structure synchronized.
-- No density dependence for now.
 
 ### Predator processes
 1. **Search** on the current plant (see Simulation engine: encounters are built from 2008 tracking data, body size and plant area, with aphid aggregation).
 2. **Capture**: success = species capture (free) × a prey-size factor (small larvae cannot subdue large aphids). Pea aphids escape well (they drop from the plant); bean aphids are easy to catch. This trades off against prey quality: pea is high quality but hard to catch, bean low quality but easy.
 3. **Rejection**: a captured aphid is rejected (not eaten) with probability logit⁻¹(−2.48 + 0.160 · age in days), from 2005. Species had no effect.
 4. **Handling** (`R/predator_behavior.R`): log-logistic AFT ~ aphid × starvation, fitted to the 2008 trials (size-matched prey). For other prey ages, handling is scaled by (age / ref_age)^1.30, where the exponent comes from the 2005 trials (species had no effect once age was included). ref_age is the age of the 2008 prey: 6.5 d for bean (adult) and 4.2 d for pea (0.9 mg on the provisional mass curve).
-5. **Partial consumption**: bean 85%, pea 0% (2008). The fraction eaten in a partial meal is unknown, so it is a free parameter.
-6. **Food value** = aphid mass at age × fraction eaten. Mass at age is **provisional** (`R/aphid_mass.R`): exponential growth from a neonate (pea 0.15 mg from the literature, still unverified; bean scaled by the same neonate:adult ratio) to adult mass (pea 3.8 mg, bean 0.9 mg) at maturity (pea 7.5 d, bean 6.5 d).
+5. **Partial consumption**: bean 85%, pea 0% (2008). It is not modelled separately: the calibrated value of a bean kill (item 9) absorbs it.
+6. **Food value** scales with aphid mass at age (item 9). Mass at age is **provisional** (`R/aphid_mass.R`): exponential growth from a neonate (pea 0.15 mg from the literature, still unverified; bean scaled by the same neonate:adult ratio) to adult mass (pea 3.8 mg, bean 0.9 mg) at maturity (pea 7.5 d, bean 6.5 d).
 7. **Post-handling / stay or leave**: Weibull AFT ~ aphid × starvation for the time to leave the plant after a meal, fitted to 2008 `Depart`. Each meal restarts the clock (a renewal process, as in the Cox analyses). On a plant, leave times are scaled up from leaf to plant by area, and the clock pauses while the larva is satiated. Leaving starts travel to the other plant.
 8. **Starvation** in the model = hours since the last meal, clamped to the trial range of 2–24 h when predicting handling and post-handling times.
-9. **Development** (`R/predator_development.R`; fitted in `analysis/03_predator_development.R`). Food is counted in **units**: one size-matched pea aphid (0.9 mg) fully eaten. An aphid of mass m is worth m/0.9 units if pea and v·m/0.9 if bean. This calibrated v replaces the separate partial-consumption fraction in item 6, so partial consumption isn't counted twice. Fitted from each larva's own observed daily kills in the diet experiment:
+9. **Development** (`R/predator_development.R`; fitted in `analysis/03_predator_development.R`). Food is counted in **units**: one size-matched pea aphid (0.9 mg) fully eaten. An aphid of mass m is worth m/0.9 units if pea and v·m/0.9 if bean. This calibrated v stands in for partial consumption (item 5), so it isn't counted twice. Fitted from each larva's own observed daily kills in the diet experiment:
    - **Thresholds** per instar: L1 9.0, L2 16.9, L3 31.1, L4 100.4 units. Individual log-threshold SD in the simulation: 0.2.
    - **Bean value per kill**: v = 0.50 when bean is the only food, but **0.15 when pea is also eaten**. Mixed-diet larvae killed many bean aphids and gained little from them. Rule for the simulation: v = 0.15 if pea was eaten in the previous 24 h, otherwise 0.50.
    - **Molting** happens when an instar's food reaches its threshold. L4 then enters a **1.5-day non-feeding pre-pupa** and pupates; the predator leaves the simulation at pupation.
@@ -118,7 +117,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
    - Baseline: L1 0.035, L2–L3 0.014, L4 0.051, pupa 0.005 per day.
    - **L1 bean toxicity**: hazard × (1 + bean/(1 + pea))^0.45, using kills since hatching. This is "amount eaten, buffered by pea", as chosen.
    - **Pupation failure**: a larva reaching the L4 threshold pupates with probability (1 + bean/(1 + pea))^−0.15. γ = 0.15 was calibrated by simulating the diet and diet-timing experiments. Bean-fed 4th instars often ate well past the threshold and still died ("attempting to pupate").
-   - **Starvation**: no time-to-death data ("died as larva" only). Free parameter, still to be set when the full model is built.
+   - **Starvation**: no time-to-death data ("died as larva" only), so it is a free parameter (lognormal time since the last meal; see Simulation engine).
 
 #### Development fit: known misfits (see `output/figures/development_*`)
 - Mixed-diet L1 is too fast in the simulation (3.2 d vs 5.3 d observed). Mixed-diet L1 larvae needed more units than the common threshold.
@@ -130,7 +129,7 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 #### Known issues with the behavior parameters
 - **Bean handling differs between years — mostly a starvation effect.** At matched starvation (≤ 4.5 h, the 2005 range), 2008 bean handling has a median of 52 min (IQR 40–70, n = 7), against 20 min (IQR 11–51, n = 31) in 2005 for adult-sized bean aphids. Across all 2008 trials (2–24 h) the median is 126 min. So most of the conflict came from comparing hungrier 2008 larvae with recently fed 2005 larvae. The 2008 model captures the effect through its aphid × starvation term. The remaining ~2.6× gap rests on 7 low-starvation 2008 trials.
 - (Earlier note) **Bean handling differs between years.** The 2005 and 2008 trials defined handling the same way (until the larva moved away from the feeding site). Pea handling agrees between them, but for adult-sized bean aphids 2005 gives about 15–20 min and 2008 about 70–130 min. The model uses 2008, which is larger, documented (4th instar, video) and the source of the lethargy results. Possible causes: predator instar or history in 2005 (undocumented), or a change in the bean aphid culture.
-- Behavior data come only from 4th instars. Handling for earlier instars needs a scaling assumption (to be set when development is modeled).
+- Behavior data come only from 4th instars. Handling time is not scaled by instar, only by aphid age; earlier instars differ through capture success (prey size), search rate (body size) and gut capacity.
 
 ### Calibration targets for predator development and survival
 - Development time per stage and survival to pupation and to adult under B, M and P diets (`develop`, `diet_summary`).
@@ -158,22 +157,22 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Satiation**: the gut empties exponentially (digestion_rate = 4/day, free). The larva attacks only when the gut has room for one size-matched prey (gut ≤ C − 1). C for each instar is set so that, with ad lib prey, the steady cycle of handling plus digestion pause gives the observed ad lib kill rate: C − 1 = e^(−k(T−h)) / (1 − e^(−kT)), with T = 1/(kills/day) and h = mean pea handling (15 min). Gut fill per kill = aphid mass / 0.9 for both species.
 - **Hunger** for the behavior models = hours since the last meal, clamped to 2–24 h.
 - **Bean handling with experience**: bean handling multiplier = m + (1 − m)·exp(−bean meals / learn_meals). Naive larvae follow the 2008 trials (bean-naive, pea-reared). m is calibrated so that simulated bean-diet vials match the 2008 L4 kill rate of ~25 bean/day (`analysis/04`). learn_meals = 20 (free; "slow learners").
-- **Leaving a plant**: the 2008 post-handling times (Weibull, species × starvation) are for leaving one 48 cm² leaf. Walking off a leaf on a plant leads to another leaf of the same plant, so leaving the plant = giving up on n_leaves = plant_area / trial_leaf_area × leave_scaling (≈ 52) leaves in turn. The leave time is the **sum of n_leaves leaf-level draws**, redrawn after each meal.
+- **Leaving a plant**: the 2008 post-handling times (Weibull, species × starvation) are for leaving one 48 cm² leaf. Walking off a leaf on a plant leads to another leaf of the same plant, so leaving the plant = giving up on n_leaves = plant_area / trial_leaf_area × leave_scaling (≈ 17 on the 800 cm² default plant) leaves in turn. The leave time is the **sum of n_leaves leaf-level draws**, redrawn after each meal.
   - On arrival at a plant, the pea model at current hunger applies; a hatchling doesn't leave before its first meal.
   - The leave clock pauses while the larva is satiated.
-  - Two rejected versions: multiplying one draw by 52 kept the fitted early-departure spike (Weibull shape 0.7), and resetting the clock on every encounter made it worse. In both, larvae walked off dense colonies within hours of a meal and starved on the empty plant.
+  - Two rejected versions (tested on 2,500 cm² plants, ~52 leaves): multiplying one draw by the number of leaves kept the fitted early-departure spike (Weibull shape 0.7), and resetting the clock on every encounter made it worse. In both, larvae walked off dense colonies within hours of a meal and starved on the empty plant.
   - **Consequence**: a larva on a growing colony essentially never leaves (summed times are days). Between-plant effects therefore need conditions that make a larva leave: a depleted or small colony, a poor starting plant, or several larvae.
-- **Travel**: the plants are separate, so the larva walks down one, across the soil and up the other (plant_path = 1.2 m). Travel time = path / (speed × activity), ~25–60 min.
+- **Travel**: the plants are separate, so the larva walks down one, across the soil and up the other (plant_path = 0.9 m). Travel time = path / (speed × activity), ~20–45 min.
 - **Starvation**: death at lognormal time since the last meal (median L1 1.5, L2 2, L3 2.5, L4 4 d; sdlog 0.25; free). The clock pauses during handling. An L4 with food ≥ its critical value that has gone 24 h without a meal enters the pre-pupa after the fitted delay.
 - **Mortality**: background plus L1 bean hazard, applied as a cumulative-hazard budget that is updated whenever the hazard changes.
 - **Vial mode** (calibration and validation): prey are replaced as eaten and held at the size-matched age, there is no aphid demography, the larva doesn't leave, and the arena is 50 cm² with capture = 1.
-- **Default plant and scenario**: a medium fava plant (~3–4 weeks, ~30 cm, 5–6 compound leaves): 800 cm² searchable (both leaf surfaces plus stem), ~20 g fresh biomass, plants 0.9 m apart by walking path. Each colony is founded by **10 aphids of mixed ages** drawn from the species' stable age distribution (Euler–Lotka on the fitted life table: λ ≈ 1.46/day pea, 1.44/day bean; ~7% adults), giving ~30–45 aphids by day 3 (as 2 adult founders did). Ages are drawn inside each run with the run's seed. The larva hatches on **day 3** beside the plant-1 colony; runs last 35 days.
-  - Mixed-age founders soften, but don't remove, the predator-free decline after the colony reaches capacity (pea at day 35: ~290 vs ~190 with 2 adult founders). The rest comes from births-only density dependence: births nearly stop at capacity, so the colony ages together and cycles with a period near the aphid lifespan. Removing it would need crowding to act on deaths or emigration (alates), which isn't modelled.
-  - **Why these values** (exploratory runs, 2026-10-03). On 2,500 cm² plants a larva hatching on day 7 never depleted a colony and never left it: giving up on ~52 leaves takes days. Depletion needs the larva to arrive during early colony growth. Hatching on day 3 (~20 aphids) cut pea aphid-days by ~46% and wiped out the colony in ~40% of runs. Hatching on day 4–5 had almost no effect, and on day 0 hatchlings mostly starved.
+- **Default plant and scenario**: a medium fava plant (~3–4 weeks, ~30 cm, 5–6 compound leaves): 800 cm² searchable (both leaf surfaces plus stem), ~20 g fresh biomass, plants 0.9 m apart by walking path. Each colony is founded by **10 aphids of mixed ages** drawn from the species' stable age distribution (Euler–Lotka on the fitted life table: λ ≈ 1.46/day pea, 1.44/day bean; ~5% (pea) and ~8% (bean) adults), giving ~30–45 aphids by day 3 (as 2 adult founders did). Ages are drawn inside each run with the run's seed. The larva hatches on **day 3** beside the plant-1 colony; runs last 35 days.
+  - Mixed-age founders were introduced under the earlier births-only density dependence, where they softened but didn't remove a predator-free decline after the colony reached capacity: births nearly stopped, so the colony aged together and cycled. With crowding mortality and winged emigration (see Aphid processes), colonies now level off without a late decline.
+  - **Why these values** (exploratory runs, 2026-10-03). On 2,500 cm² plants a larva hatching on day 7 never depleted a colony and never left it: giving up on ~52 leaves takes days. Depletion needs the larva to arrive during early colony growth. Hatching on day 3 (~20 aphids from the 2 adult founders used then; ~30–45 with today's 10 mixed-age founders) cut pea aphid-days by ~46% and wiped out the colony in ~40% of runs. Hatching on day 4–5 had almost no effect, and on day 0 hatchlings mostly starved.
   - On an 800 cm² plant (~17 leaves to give up on), ~15% of larvae left for the other plant about a day after the colony died out. On 1,200 cm² none did.
   - The window is narrow, so hatch day is a factor in the sensitivity analysis.
 - **Assumed (no data) parameters**: detection width, plant area, colony_min_area, colony_packing (pea, bean), prey_size_ratio and size steepness, capture (pea 0.1, bean 0.8), leave_scaling, plant_path, digestion_rate, learn_meals, starvation medians, rejection_time, plant_biomass, competition_alpha, density_lag. They are explored by sensitivity analysis.
-- **Not yet represented**: alate production / aphid emigration, instar effects on handling time (behavior data are L4 only), separate colonies per aphid species on a shared plant, and more than one larva.
+- **Not yet represented**: instar effects on handling time (behavior data are L4 only), separate colonies per aphid species on a shared plant, and more than one larva.
 
 ## Sensitivity analysis (`R/sensitivity.R`, `analysis/06_sensitivity.R`)
 
@@ -193,6 +192,7 @@ R/          functions: data import/cleaning, fitting helpers, samplers, DES engi
 analysis/   numbered scripts: fit each parameter set, calibrate, validate, run experiments
 docs/       this design document
 data/       raw data (read-only)
+tests/      testthat suite and its regression reference
 ```
 
 ## Open items

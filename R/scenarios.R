@@ -31,7 +31,7 @@ vial_params <- function(params) {
 #'   give ~30-45 aphids by day 3, like 2 adult founders. Small founding
 #'   colonies leave the aphids room to grow before reaching capacity.
 #' @param predator TRUE to add one L1 larva on `predator_plant` at
-#'   `predator_day`. Default day 3: the colony (2 founders) has ~20 aphids, a
+#'   `predator_day`. Default day 3: the colony has ~30-45 aphids, a
 #'   hatchling can survive, and one larva can still depress or deplete it
 #'   (from day 4-5 the colony outgrows a single larva).
 #' @param founders "stable" (default): each colony's founders have mixed ages
