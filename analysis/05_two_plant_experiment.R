@@ -26,17 +26,11 @@ library(ggplot2)
 source("R/load_model.R")
 
 dir.create("output/figures", recursive = TRUE, showWarnings = FALSE)
-n_cores <- max(1L, parallel::detectCores() - 1L)
 RNGkind("L'Ecuyer-CMRG")
 set.seed(4040)
 
 params <- default_params()
 stopifnot(is.finite(params$bean_handling_experienced))
-
-run_many <- function(scenario, reps, summarize) {
-  parallel::mclapply(seq_len(reps), \(i) summarize(simulate_two_plants(params, scenario)),
-                     mc.cores = n_cores, mc.set.seed = TRUE)
-}
 
 census_of <- function(runs) bind_rows(purrr::map(runs, "census"), .id = "rep")
 
@@ -48,7 +42,7 @@ no_pred <- tibble(
 ) |>
   mutate(census = purrr::map(plant1, \(p1) {
     sc <- two_plant_scenario(p1, c(pea = 0), predator = FALSE, run_days = 60)
-    census_of(run_many(sc, 24, \(r) list(census = r$census)))
+    census_of(run_many(params, sc, 24, \(r) list(census = r$census)))
   })) |>
   select(setting, census) |>
   unnest(census) |>
@@ -94,7 +88,7 @@ if (rerun || !file.exists(cache)) {
     crossing(predator = c(TRUE, FALSE)) |>
     mutate(runs = purrr::pmap(list(plant1, plant2, predator), \(p1, p2, pred) {
       sc <- two_plant_scenario(p1, p2, predator = pred, run_days = run_days)
-      run_many(sc, reps, \(r) list(
+      run_many(params, sc, reps, \(r) list(
         census = r$census,
         fate = r$predator$fate,
         fate_day = r$predator$fate_day,

@@ -39,7 +39,7 @@ source("R/load_model.R")
 out_dir <- Sys.getenv("SENS_OUT", "output/sensitivity")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create("output/figures", recursive = TRUE, showWarnings = FALSE)
-n_cores <- max(1L, parallel::detectCores() - 1L)
+n_cores <- default_cores()
 
 base_params <- default_params()
 stopifnot(is.finite(base_params$bean_handling_experienced))

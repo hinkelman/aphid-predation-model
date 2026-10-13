@@ -92,3 +92,16 @@ sample_founder_ages <- function(n, params, species) {
   sad <- stable_age_distribution(params, species)
   sample(sad$age, n, replace = TRUE, prob = sad$prop) + runif(n)
 }
+
+#' Cores for forked parallel runs: all but one.
+default_cores <- function() max(1L, parallel::detectCores() - 1L)
+
+#' Run `reps` independent replicates of a scenario in parallel (forked, so
+#' run scripts with Rscript, not in Positron) and apply `summarize` to each
+#' run inside the worker, so only the summaries are returned. Replicates get
+#' independent L'Ecuyer-CMRG streams; set RNGkind("L'Ecuyer-CMRG") and a
+#' seed beforehand for reproducibility.
+run_many <- function(params, scenario, reps, summarize = identity, cores = default_cores()) {
+  parallel::mclapply(seq_len(reps), \(i) summarize(simulate_two_plants(params, scenario)),
+                     mc.cores = cores, mc.set.seed = TRUE)
+}

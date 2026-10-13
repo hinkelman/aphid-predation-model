@@ -16,14 +16,8 @@ library(ggplot2)
 source("R/load_model.R")
 
 dir.create("output/figures", recursive = TRUE, showWarnings = FALSE)
-n_cores <- max(1L, parallel::detectCores() - 1L)
 RNGkind("L'Ecuyer-CMRG")
 set.seed(2026)
-
-run_many <- function(params, scenario, reps, summarize = identity) {
-  parallel::mclapply(seq_len(reps), \(i) summarize(simulate_two_plants(params, scenario)),
-                     mc.cores = n_cores, mc.set.seed = TRUE)
-}
 
 params <- default_params()
 diet_intervals <- read_diet_experiment()
