@@ -168,8 +168,21 @@ about 3.8 mg for pea. So predator handling, consumption and development data all
 - **Vial mode** (calibration and validation): prey are replaced as eaten and held at the size-matched age, there is no aphid demography, the larva doesn't leave, and the arena is 50 cm² with capture = 1.
 - **Default plant and scenario**: a medium fava plant (~3–4 weeks, ~30 cm, 5–6 compound leaves): 800 cm² searchable (both leaf surfaces plus stem), ~20 g fresh biomass, plants 0.9 m apart by walking path. Each colony is founded by **10 aphids of mixed ages** drawn from the species' stable age distribution (Euler–Lotka on the fitted life table: λ ≈ 1.46/day pea, 1.44/day bean; ~5% (pea) and ~8% (bean) adults), giving ~30–45 aphids by day 3 (as 2 adult founders did). Ages are drawn inside each run with the run's seed. The larva hatches on **day 3** beside the plant-1 colony; runs last 35 days.
   - Mixed-age founders were introduced under the earlier births-only density dependence, where they softened but didn't remove a predator-free decline after the colony reached capacity: births nearly stopped, so the colony aged together and cycled. With crowding mortality and winged emigration (see Aphid processes), colonies now level off without a late decline.
-  - **Why these values** (exploratory runs, 2026-10-03). On 2,500 cm² plants a larva hatching on day 7 never depleted a colony and never left it: giving up on ~52 leaves takes days. Depletion needs the larva to arrive during early colony growth. Hatching on day 3 (~20 aphids from the 2 adult founders used then; ~30–45 with today's 10 mixed-age founders) cut pea aphid-days by ~46% and wiped out the colony in ~40% of runs. Hatching on day 4–5 had almost no effect, and on day 0 hatchlings mostly starved.
+  - **Why these values** (exploratory runs, 2026-10-03). On 2,500 cm² plants a larva hatching on day 7 never depleted a colony and never left it: giving up on ~52 leaves takes days. Depletion needs the larva to arrive during early colony growth.
   - On an 800 cm² plant (~17 leaves to give up on), ~15% of larvae left for the other plant about a day after the colony died out. On 1,200 cm² none did.
+  - **Hatch day with the current defaults** (2026-10-12): Pea | none, 10 mixed-age founders, 35-day runs, 80 runs per hatch day. Impact = reduction in pea aphid-days on plant 1 relative to 80 runs without a predator, where the colony never died out. Larvae that neither pupated nor starved died of background mortality or failed pupation.
+
+    | Hatch day | Pea aphids on plant 1 at hatching (median) | Impact on pea aphid-days (± SE) | Colony wiped out | Larva pupates | Larva starves |
+    |---|---|---|---|---|---|
+    | 0 | 10 | 69% ± 5 | 64% | 5% | 82% |
+    | 1 | 16 | 69% ± 5 | 65% | 12% | 68% |
+    | 2 | 22 | 65% ± 5 | 60% | 34% | 39% |
+    | **3** (default) | 31 | **38% ± 5** | 31% | 53% | 17% |
+    | 4 | 48 | 15% ± 3 | 6% | 68% | 0% |
+    | 5 | 72 | 8% ± 2 | 2.5% | 62% | 0% |
+    | 6 | 104 | 5% ± 1 | 0% | 66% | 0% |
+
+    From day 4 the colony outgrows a single larva: impact falls to 15% and the colony is rarely wiped out. Earlier hatchlings depress the colony most but often eat it out and then starve. Day 3 is the default because a hatchling usually survives (53% pupate) and still depresses the colony.
   - The window is narrow, so hatch day is a factor in the sensitivity analysis.
 - **Assumed (no data) parameters**: detection width, plant area, colony_min_area, colony_packing (pea, bean), prey_size_ratio and size steepness, capture (pea 0.1, bean 0.8), leave_scaling, plant_path, digestion_rate, learn_meals, starvation medians, rejection_time, plant_biomass, competition_alpha, density_lag. They are explored by sensitivity analysis.
 - **Not yet represented**: instar effects on handling time (behavior data are L4 only), separate colonies per aphid species on a shared plant, and more than one larva.
