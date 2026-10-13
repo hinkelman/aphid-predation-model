@@ -28,6 +28,8 @@ default_params <- function(param_dir = "output/params") {
   mean_pea_handling <- exp(hb$coef[["(Intercept)"]] + 2 * hb$coef[["starve"]]) *
     (pi * hb$sigma) / sin(pi * hb$sigma)
 
+  pupation_coef <- coef(d$critical$pupation) # logit(pupated) ~ L4 food
+
   intake <- d$max_intake |>
     dplyr::filter(diet == "P") |>
     dplyr::arrange(stage) |>
@@ -46,7 +48,7 @@ default_params <- function(param_dir = "output/params") {
     ),
     post_handling = list(coef = pb$coef, sigma = pb$sigma), # Weibull AFT
     rejection = coef(beh$behavior$rejection), # logit ~ aphid_age (days)
-    starve_range = c(2, 24), # hours; behavior predictions clamped
+    starve_range = starve_range, # hours; behavior predictions clamped
 
     # Predator development (fitted) ----------------------------------------
     threshold = d$thresholds$threshold, # units per instar
@@ -58,9 +60,9 @@ default_params <- function(param_dir = "output/params") {
     mean_pea_handling = mean_pea_handling,
     mortality = d$mortality,
     pupation_gamma = dev$pupation_gamma,
-    critical_food = list(
-      location = unname(-coef(d$critical$pupation)[1] / coef(d$critical$pupation)[2]),
-      scale = unname(1 / coef(d$critical$pupation)[2])
+    critical_food = list( # logistic distribution of the 50% point across larvae
+      location = d$critical$critical_food,
+      scale = unname(1 / pupation_coef[2])
     ),
     pupation_delay = coef(d$critical$delay), # days ~ L4 food at starvation onset
     prepupa_days = dev$prepupa_days,

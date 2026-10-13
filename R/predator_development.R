@@ -83,6 +83,10 @@ fit_larval_mortality <- function(diet_intervals) {
   )
 }
 
+#' Bean load: 1 + bean eaten / (1 + pea eaten). Bean toxicity (L1 hazard,
+#' pupation failure) scales as a power of this, buffered by pea eaten.
+bean_load <- function(bean_cum, pea_cum) 1 + bean_cum / (1 + pea_cum)
+
 mortality_stage_group <- function(stage) {
   factor(dplyr::case_when(
     stage == "L1" ~ "L1",
@@ -98,7 +102,7 @@ mortality_hazard <- function(stage, bean_cum, pea_cum, mortality) {
   base <- exp(mortality$log_hazard[as.character(mortality_stage_group(stage))])
   bean_term <- dplyr::if_else(
     stage == "L1",
-    (1 + bean_cum / (1 + pea_cum))^mortality$l1_bean_exponent,
+    bean_load(bean_cum, pea_cum)^mortality$l1_bean_exponent,
     1
   )
   unname(base * bean_term)
@@ -161,7 +165,7 @@ fit_critical_food <- function(diet_intervals, diet_timing) {
 #' load as the L1 hazard: P(success) = (1 + bean / (1 + pea))^-gamma.
 #' gamma is calibrated by simulation (analysis/03_predator_development.R).
 pupation_success <- function(bean_cum, pea_cum, gamma) {
-  (1 + bean_cum / (1 + pea_cum))^(-gamma)
+  bean_load(bean_cum, pea_cum)^(-gamma)
 }
 
 #' Fit all development components.
