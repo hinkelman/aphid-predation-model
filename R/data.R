@@ -5,6 +5,9 @@
 
 data_path <- function(...) file.path("data", ...)
 
+#' Aphid species as a factor with a fixed level order (pea, bean).
+as_aphid <- function(x) factor(x, levels = c("pea", "bean"))
+
 # Several CSVs were saved with classic Mac (CR-only) line endings, which
 # read.csv/readr misread as a single line. Normalize line endings first.
 read_mac_csv <- function(file, ...) {
@@ -32,7 +35,7 @@ read_clip_cage <- function(drop_sterile = TRUE) {
     janitor::clean_names() |>
     dplyr::rename(died = status2) |>
     dplyr::mutate(
-      aphid = factor(aphid, levels = c("pea", "bean")),
+      aphid = as_aphid(aphid),
       id = as.integer(id),
       day = as.integer(day),
       date = as.Date("2009-12-15") + day - 1L,
@@ -62,7 +65,8 @@ clip_cage_lifespans <- function(clip_cage = read_clip_cage()) {
 #' * `handle`: from securing the aphid until moving away from the feeding
 #'   site (`handle_end` = 1 if observed).
 #' * `post_handle`: from the end of handling until leaving the leaf
-#'   (`left` = 1 if observed). One trial has post_handle = 0.
+#'   (`left` = 1 if observed). One trial recorded 0; it is floored at
+#'   0.05 min so log-time (AFT) models can be fitted.
 #' Movement over the tracked part of post-handling time (up to 90 min; NA for
 #' 13 untracked videos): `move_speed` (mm/s while moving) and `activity`
 #' (proportion of tracked time moving).
@@ -70,14 +74,14 @@ read_behavior_trials <- function() {
   read_mac_csv(data_path("handle_depart_move.csv")) |>
     dplyr::transmute(
       id = ID,
-      aphid = factor(Aphid, levels = c("pea", "bean")),
+      aphid = as_aphid(Aphid),
       l4_day = Age,
       starve = Starve,
       mass = Mass * 1000, # mg
       handle = Handle,
       handle_end = HandleEnd,
       partial = Partial,
-      post_handle = Depart,
+      post_handle = pmax(Depart, 0.05),
       left = Left,
       brush = Brush,
       harass = Harass,
@@ -98,7 +102,7 @@ read_handle_age <- function() {
   read_mac_csv(data_path("HandleAge.csv")) |>
     dplyr::transmute(
       id = ID,
-      aphid = factor(tolower(Aphid.Species), levels = c("pea", "bean")),
+      aphid = as_aphid(tolower(Aphid.Species)),
       aphid_age = Aphid.Age,
       starve = Starve,
       handle = Handle,
@@ -156,6 +160,12 @@ read_diet_experiment <- function() {
       next_stage = factor(next_stage, levels = levels(stage))
     ) |>
     dplyr::select(id, diet, day, stage, next_stage, pea, bean, died, censored)
+}
+
+#' Larval diet experiment: one row per larva, with its diet and fate
+#' (`pupate` = 1 if it pupated).
+read_diet_summary <- function() {
+  read_mac_csv(data_path("diet_summary.csv")) |> janitor::clean_names()
 }
 
 #' Diet timing experiment: 4th instars switched to bean aphids (B) or no food

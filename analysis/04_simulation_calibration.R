@@ -21,10 +21,8 @@ set.seed(2026)
 
 params <- default_params()
 diet_intervals <- read_diet_experiment()
-diet_summary <- read_mac_csv(data_path("diet_summary.csv")) |> janitor::clean_names()
+diet_summary <- read_diet_summary()
 
-diet_labels <- c(P = "Pea diet", M = "Mixed diet", B = "Bean diet")
-diet_colours <- c(P = species_colours[["pea"]], M = "#8c6bb1", B = species_colours[["bean"]])
 
 vial_runs <- function(diet, m, reps) {
   p <- vial_params(params)

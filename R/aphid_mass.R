@@ -17,7 +17,7 @@ aphid_mass_anchors <- function(clip_cage = read_clip_cage()) {
     dplyr::summarise(age_mature = median(first_repro) - 0.5, .by = aphid)
 
   tibble::tibble(
-    aphid = factor(c("pea", "bean"), levels = c("pea", "bean")),
+    aphid = as_aphid(c("pea", "bean")),
     mass_adult = c(3.8, 0.9),
     mass_neonate = c(0.15, 0.9 * 0.15 / 3.8)
   ) |>

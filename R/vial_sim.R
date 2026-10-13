@@ -37,8 +37,7 @@ simulate_vial_larvae <- function(n, diet, development, switch = NULL,
   bean_cum <- pea_cum <- rep(0, n) # kills since hatching
   mult <- exp(rnorm(n * 4, 0, threshold_sd)) |> matrix(ncol = 4)
   threshold <- sweep(mult, 2, th$threshold, `*`)
-  crit_food <- rlogis(n, -coef(crit$pupation)[1] / coef(crit$pupation)[2],
-                      1 / coef(crit$pupation)[2])
+  crit_food <- rlogis(n, crit$critical_food, 1 / coef(crit$pupation)[2])
   stage_entry <- matrix(NA_real_, n, 6) # day each stage was entered
   stage_entry[, 1] <- 0
   l4_entry <- rep(NA_real_, n)

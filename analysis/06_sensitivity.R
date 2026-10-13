@@ -173,10 +173,11 @@ factor_labels <- c(
   density_lag = "Density-dependence lag", hatch_day = "Hatch day"
 )
 
+ranked_outputs <- c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb")
 p_rank <- effects |>
-  filter(output %in% c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb")) |>
+  filter(output %in% ranked_outputs) |>
   mutate(
-    output = factor(output, levels = c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb"), labels = output_labels[c("impact_pp", "bean_benefit_other", "bean_benefit_same", "pupate_pb")]),
+    output = factor(output, levels = ranked_outputs, labels = output_labels[ranked_outputs]),
     # order factors by mu_star within each facet
     factor = reorder(paste(factor_labels[factor], output, sep = "___"), mu_star)
   ) |>

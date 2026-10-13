@@ -8,6 +8,10 @@ species_colours <- c(pea = "#d55181", bean = "#262626")
 
 species_labels <- c(pea = "Pea aphid", bean = "Bean aphid")
 
+# Larval rearing diets: pea (P), mixed (M), bean (B) aphids.
+diet_labels <- c(P = "Pea diet", M = "Mixed diet", B = "Bean diet")
+diet_colours <- c(P = species_colours[["pea"]], M = "#8c6bb1", B = species_colours[["bean"]])
+
 theme_model <- function(base_size = 10) {
   ggplot2::theme_minimal(base_size = base_size) +
     ggplot2::theme(

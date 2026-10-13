@@ -25,10 +25,8 @@ set.seed(20080915)
 
 diet_intervals <- read_diet_experiment()
 diet_timing <- read_diet_timing()
-diet_summary <- read_mac_csv(data_path("diet_summary.csv")) |> janitor::clean_names()
+diet_summary <- read_diet_summary()
 
-diet_labels <- c(P = "Pea diet", M = "Mixed diet", B = "Bean diet")
-diet_colours <- c(P = species_colours[["pea"]], M = "#8c6bb1", B = species_colours[["bean"]])
 
 # Fit -----------------------------------------------------------------------
 

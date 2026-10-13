@@ -188,11 +188,13 @@ ggsave("output/figures/aphid_sampler_check.png", p_check, width = 7, height = 5.
 
 demography$frailty
 
-fecundity_summary <- bind_rows(
+lifetime_offspring <- bind_rows(
   `Clip-cage data` = lifespans |> filter(died == 1),
   `Simulated cohort` = sim_births,
   .id = "source"
-) |>
+)
+
+fecundity_summary <- lifetime_offspring |>
   summarise(
     n = n(),
     mean = mean(total_offspring),
@@ -203,11 +205,7 @@ fecundity_summary <- bind_rows(
   arrange(aphid, source)
 fecundity_summary
 
-p_fecundity <- bind_rows(
-  `Clip-cage data` = lifespans |> filter(died == 1),
-  `Simulated cohort` = sim_births,
-  .id = "source"
-) |>
+p_fecundity <- lifetime_offspring |>
   ggplot(aes(total_offspring, after_stat(density), fill = aphid)) +
   geom_histogram(binwidth = 5, boundary = 0, colour = "white", linewidth = 0.3) +
   facet_grid(source ~ aphid, labeller = labeller(aphid = species_labels)) +

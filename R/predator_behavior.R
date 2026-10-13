@@ -10,6 +10,7 @@
 # Starvation range in the 2008 behavior trials; predictions are clamped to
 # this range rather than extrapolated.
 starve_range <- c(2, 24)
+clamp_starve <- function(starve) pmin(pmax(starve, starve_range[1]), starve_range[2])
 
 fit_aft <- function(formula, data, dist) {
   fit <- survival::survreg(formula, data = data, dist = dist)
@@ -62,7 +63,6 @@ aft_survival <- function(t, lp, sigma, dist) {
 #' * partial: 2008 trials, proportion of meals only partially consumed
 fit_predator_behavior <- function(trials = read_behavior_trials(),
                                   handle_age = read_handle_age()) {
-  trials <- dplyr::mutate(trials, post_handle = pmax(post_handle, 0.05))
   handled <- dplyr::filter(handle_age, rejected == 0, !is.na(handle))
 
   age_model <- fit_aft(
@@ -93,10 +93,7 @@ fit_predator_behavior <- function(trials = read_behavior_trials(),
 #' age of the 2008 prey of that species (see `reference_prey_age()`).
 sample_handling_time <- function(aphid, starve, aphid_age, behavior, ref_age) {
   m <- behavior$handling
-  nd <- tibble::tibble(
-    aphid = factor(aphid, levels = c("pea", "bean")),
-    starve = pmin(pmax(starve, starve_range[1]), starve_range[2])
-  )
+  nd <- tibble::tibble(aphid = as_aphid(aphid), starve = clamp_starve(starve))
   age_shift <- behavior$age_exponent * log(aphid_age / ref_age[as.character(aphid)])
   sample_aft(aft_lp(m, nd) + age_shift, m$sigma, m$dist)
 }
@@ -105,10 +102,7 @@ sample_handling_time <- function(aphid, starve, aphid_age, behavior, ref_age) {
 #' prey is encountered). `starve` is hunger before the meal just eaten.
 sample_post_handling_time <- function(aphid, starve, behavior) {
   m <- behavior$post_handling
-  nd <- tibble::tibble(
-    aphid = factor(aphid, levels = c("pea", "bean")),
-    starve = pmin(pmax(starve, starve_range[1]), starve_range[2])
-  )
+  nd <- tibble::tibble(aphid = as_aphid(aphid), starve = clamp_starve(starve))
   sample_aft(aft_lp(m, nd), m$sigma, m$dist)
 }
 
@@ -148,8 +142,6 @@ fit_movement <- function(trials = read_behavior_trials()) {
 
 #' Proportion of time moving after a meal of `aphid` at hunger `starve` (h).
 activity_after_meal <- function(aphid, starve, movement) {
-  starve <- pmin(pmax(starve, starve_range[1]), starve_range[2])
-  unname(predict(movement$activity,
-                 tibble::tibble(aphid = factor(aphid, levels = c("pea", "bean")), starve = starve),
-                 type = "response"))
+  nd <- tibble::tibble(aphid = as_aphid(aphid), starve = clamp_starve(starve))
+  unname(predict(movement$activity, nd, type = "response"))
 }

@@ -52,7 +52,7 @@ p_no_pred <- no_pred |>
   summarise(median = median(n), lo = quantile(n, 0.1), hi = quantile(n, 0.9), .by = c(setting, species, day)) |>
   mutate(setting = factor(setting, levels = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"))) |>
   filter(!(setting == "Pea aphids alone" & species == "bean"), !(setting == "Bean aphids alone" & species == "pea")) |>
-  mutate(species = factor(species, levels = c("pea", "bean"))) |>
+  mutate(species = as_aphid(species)) |>
   ggplot(aes(day, median, colour = species, fill = species)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) +
   geom_line(linewidth = 0.7) +

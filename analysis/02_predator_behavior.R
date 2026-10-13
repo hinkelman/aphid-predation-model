@@ -32,13 +32,12 @@ aic_table <- crossing(
   dist = c("exponential", "weibull", "lognormal", "loglogistic")
 ) |>
   mutate(aic = purrr::map2_dbl(response, dist, \(r, d) {
-    dat <- mutate(trials, post_handle = pmax(post_handle, 0.05))
     f <- if (r == "handle") {
       survival::Surv(handle, handle_end) ~ aphid * starve
     } else {
       survival::Surv(post_handle, left) ~ aphid * starve
     }
-    AIC(survival::survreg(f, data = dat, dist = d))
+    AIC(survival::survreg(f, data = trials, dist = d))
   })) |>
   mutate(delta_aic = aic - min(aic), .by = response) |>
   arrange(response, aic)
@@ -76,9 +75,11 @@ starve_classes <- function(d) {
                                labels = c("2–8 h", "8–16 h", "16–24 h")))
 }
 
-km_by_group <- function(d, time, event) {
+# Kaplan-Meier curves of a duration, by `aphid` and any further grouping
+# columns, each starting at (0, 1).
+km_curves <- function(d, time, event, ...) {
   d |>
-    group_by(aphid, starve_class) |>
+    group_by(aphid, ...) |>
     group_modify(\(g, k) {
       fit <- survival::survfit(survival::Surv(g[[time]], g[[event]]) ~ 1)
       tibble(t = c(0, fit$time), surv = c(1, fit$surv))
@@ -96,7 +97,7 @@ model_curves <- function(d, model, tmax) {
 
 plot_duration_fit <- function(d, time, event, model, title, x_lab) {
   d <- starve_classes(d)
-  km <- km_by_group(d, time, event)
+  km <- km_curves(d, time, event, starve_class)
   fit <- model_curves(d, model, max(d[[time]]))
   ggplot(mapping = aes(t, surv, colour = aphid)) +
     geom_step(data = filter(km, t > 0), linewidth = 0.4, alpha = 0.7) +
@@ -118,7 +119,7 @@ p_handle <- plot_duration_fit(
 ggsave("output/figures/behavior_handling.png", p_handle, width = 8, height = 3.8, dpi = 200)
 
 p_post <- plot_duration_fit(
-  mutate(trials, post_handle = pmax(post_handle, 0.05)), "post_handle", "left",
+  trials, "post_handle", "left",
   behavior$post_handling,
   "Post-handling time until leaving the leaf (Weibull, aphid × starvation)",
   "Post-handling time (min, log scale)"
@@ -132,7 +133,7 @@ age_grid <- tibble(aphid_age = seq(1, 12, by = 0.1)) |>
          median = exp(lp)) # log-logistic median = exp(lp)
 
 ref_2008 <- tibble(
-  aphid = factor(names(ref_age), levels = c("pea", "bean")),
+  aphid = as_aphid(names(ref_age)),
   aphid_age = ref_age
 ) |>
   mutate(median = exp(aft_lp(behavior$handling, tibble(aphid = aphid, starve = 2.7))))
@@ -159,14 +160,14 @@ ggsave("output/figures/behavior_handling_by_age.png", p_age, width = 7, height =
 
 # Provisional aphid mass at age ---------------------------------------------
 
-mass_curve <- crossing(aphid = factor(c("pea", "bean"), levels = c("pea", "bean")),
+mass_curve <- crossing(aphid = as_aphid(c("pea", "bean")),
                        age = seq(0, 12, by = 0.05)) |>
   mutate(mass = purrr::map2_dbl(age, aphid, \(a, sp) aphid_mass(a, filter(mass_anchors, aphid == sp))))
 
 p_mass <- ggplot(mass_curve, aes(age, mass, colour = aphid)) +
   geom_line(linewidth = 0.8) +
   geom_point(
-    data = tibble(aphid = factor(names(ref_age), levels = c("pea", "bean")),
+    data = tibble(aphid = as_aphid(names(ref_age)),
                   age = ref_age, mass = 0.9),
     shape = 21, fill = "white", size = 2.5, stroke = 1
   ) +
@@ -193,22 +194,12 @@ sim <- trials |>
     post_handle = sample_post_handling_time(aphid, starve, behavior)
   )
 
-km_pooled <- function(d, time, event) {
-  d |>
-    group_by(aphid) |>
-    group_modify(\(g, k) {
-      fit <- survival::survfit(survival::Surv(g[[time]], g[[event]]) ~ 1)
-      tibble(t = c(0, fit$time), surv = c(1, fit$surv))
-    }) |>
-    ungroup()
-}
-
 check <- bind_rows(
-  km_pooled(trials, "handle", "handle_end") |> mutate(quantity = "Handling", source = "2008 trials"),
-  km_pooled(mutate(sim, handle_end = 1), "handle", "handle_end") |> mutate(quantity = "Handling", source = "Simulated"),
-  km_pooled(mutate(trials, post_handle = pmax(post_handle, 0.05)), "post_handle", "left") |>
+  km_curves(trials, "handle", "handle_end") |> mutate(quantity = "Handling", source = "2008 trials"),
+  km_curves(mutate(sim, handle_end = 1), "handle", "handle_end") |> mutate(quantity = "Handling", source = "Simulated"),
+  km_curves(trials, "post_handle", "left") |>
     mutate(quantity = "Post-handling", source = "2008 trials"),
-  km_pooled(mutate(sim, left = 1), "post_handle", "left") |> mutate(quantity = "Post-handling", source = "Simulated")
+  km_curves(mutate(sim, left = 1), "post_handle", "left") |> mutate(quantity = "Post-handling", source = "Simulated")
 ) |>
   filter(t > 0.1)
 
