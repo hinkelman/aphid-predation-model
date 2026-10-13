@@ -33,9 +33,7 @@ library(tidyr)
 library(ggplot2)
 library(sensitivity)
 
-for (f in c("R/data.R", "R/aphid_demography.R", "R/aphid_events.R", "R/aphid_mass.R",
-            "R/predator_behavior.R", "R/predator_development.R", "R/params.R",
-            "R/simulation.R", "R/scenarios.R", "R/sensitivity.R", "R/plot_theme.R")) source(f)
+source("R/load_model.R")
 
 # Environment overrides (for quick smoke tests): SENS_OUT, SENS_R, SENS_REPS
 out_dir <- Sys.getenv("SENS_OUT", "output/sensitivity")

@@ -23,9 +23,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-for (f in c("R/data.R", "R/aphid_demography.R", "R/aphid_events.R", "R/aphid_mass.R",
-            "R/predator_behavior.R", "R/predator_development.R", "R/params.R",
-            "R/simulation.R", "R/scenarios.R", "R/plot_theme.R")) source(f)
+source("R/load_model.R")
 
 dir.create("output/figures", recursive = TRUE, showWarnings = FALSE)
 n_cores <- max(1L, parallel::detectCores() - 1L)
