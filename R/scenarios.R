@@ -28,8 +28,8 @@ vial_params <- function(params) {
 #'
 #' @param plant1,plant2 named vectors of founding aphids per species, e.g.
 #'   c(pea = 10, bean = 0). With stable-age founders, 10 aphids (~1 adult)
-#'   give ~30-45 aphids by day 3, like 2 adult founders. Small founding colonies leave the aphids room to
-#'   grow before reaching capacity.
+#'   give ~30-45 aphids by day 3, like 2 adult founders. Small founding
+#'   colonies leave the aphids room to grow before reaching capacity.
 #' @param predator TRUE to add one L1 larva on `predator_plant` at
 #'   `predator_day`. Default day 3: the colony (2 founders) has ~20 aphids, a
 #'   hatchling can survive, and one larva can still depress or deplete it

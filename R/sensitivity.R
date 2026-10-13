@@ -46,16 +46,25 @@ design_values <- function(x, ranges = free_parameter_ranges()) {
 #' scenario setting, applied by the caller.
 apply_factors <- function(params, values) {
   v <- as.list(values)
-  direct <- c("detection_width", "plant_area", "colony_min_area",
-              "prey_size_ratio", "leave_scaling", "plant_path", "digestion_rate",
-              "learn_meals", "plant_biomass", "competition_alpha")
-  for (nm in intersect(names(v), direct)) params[[nm]] <- v[[nm]]
-  if (!is.null(v$density_lag)) params$density_lag <- as.integer(round(v$density_lag))
-  if (!is.null(v$capture_pea)) params$capture[["pea"]] <- v$capture_pea
-  if (!is.null(v$packing_pea)) params$colony_packing[["pea"]] <- v$packing_pea
-  if (!is.null(v$packing_bean)) params$colony_packing[["bean"]] <- v$packing_bean
-  if (!is.null(v$capture_bean)) params$capture[["bean"]] <- v$capture_bean
-  if (!is.null(v$starvation_scale)) params$starvation_median <- params$starvation_median * v$starvation_scale
+  # factors that set one species' element of a by-species parameter
+  by_species <- list(
+    capture_pea = c("capture", "pea"), capture_bean = c("capture", "bean"),
+    packing_pea = c("colony_packing", "pea"), packing_bean = c("colony_packing", "bean")
+  )
+  for (nm in names(v)) {
+    if (nm == "hatch_day") next
+    if (nm == "density_lag") {
+      params$density_lag <- as.integer(round(v$density_lag))
+    } else if (nm == "starvation_scale") {
+      params$starvation_median <- params$starvation_median * v$starvation_scale
+    } else if (nm %in% names(by_species)) {
+      target <- by_species[[nm]]
+      params[[target[1]]][[target[2]]] <- v[[nm]]
+    } else {
+      stopifnot(nm %in% names(params))
+      params[[nm]] <- v[[nm]]
+    }
+  }
   params
 }
 

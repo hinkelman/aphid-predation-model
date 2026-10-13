@@ -83,10 +83,8 @@ simulate_vial_larvae <- function(n, diet, development, switch = NULL,
 
     # mortality (larvae and pre-pupae)
     at_risk <- stage %in% 1:5
-    h <- mortality_hazard(
-      factor(c("L1", "L2", "L3", "L4", "L4")[pmax(stage, 1)][at_risk], levels = c("L1", "L2", "L3", "L4", "Pupa")),
-      bean_cum[at_risk], pea_cum[at_risk], mort
-    )
+    hazard_stage <- c(larval_stages, "L4")[stage[at_risk]] # pre-pupae: L4 hazard
+    h <- mortality_hazard(hazard_stage, bean_cum[at_risk], pea_cum[at_risk], mort)
     die <- rep(FALSE, n)
     die[at_risk] <- runif(sum(at_risk)) < 1 - exp(-h * dt)
     stage[die] <- 0L

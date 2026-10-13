@@ -106,11 +106,6 @@ sample_post_handling_time <- function(aphid, starve, behavior) {
   sample_aft(aft_lp(m, nd), m$sigma, m$dist)
 }
 
-#' Probability that a captured aphid of a given age is rejected (not eaten).
-p_reject <- function(aphid_age, behavior) {
-  predict(behavior$rejection, tibble::tibble(aphid_age = aphid_age), type = "response")
-}
-
 #' Ages (days) of the prey used in the 2008 trials: adult bean aphids (taken
 #' as the age at maturity) and pea aphids of the same mass.
 reference_prey_age <- function(mass_anchors) {
@@ -138,10 +133,4 @@ fit_movement <- function(trials = read_behavior_trials()) {
     activity = glm(activity ~ aphid * starve, family = quasibinomial, data = tracked),
     leaf_area = mean(trials$leaf_area)
   )
-}
-
-#' Proportion of time moving after a meal of `aphid` at hunger `starve` (h).
-activity_after_meal <- function(aphid, starve, movement) {
-  nd <- tibble::tibble(aphid = as_aphid(aphid), starve = clamp_starve(starve))
-  unname(predict(movement$activity, nd, type = "response"))
 }

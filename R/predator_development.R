@@ -75,9 +75,9 @@ fit_larval_mortality <- function(diet_intervals) {
 
   fit <- glm(died ~ 0 + stage_group + l1:bean_load, family = binomial("cloglog"), data = d)
   b <- coef(fit)
+  stage_terms <- grepl("^stage_group", names(b))
   list(
-    log_hazard = setNames(b[grepl("^stage_group", names(b))],
-                          sub("stage_group", "", names(b)[grepl("^stage_group", names(b))])),
+    log_hazard = setNames(b[stage_terms], sub("stage_group", "", names(b)[stage_terms])),
     l1_bean_exponent = unname(b["l1:bean_load"]),
     fit = fit
   )

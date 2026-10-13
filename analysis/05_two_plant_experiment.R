@@ -36,22 +36,22 @@ census_of <- function(runs) bind_rows(purrr::map(runs, "census"), .id = "rep")
 
 # 1. Aphid dynamics without predators ----------------------------------------
 
+settings <- c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together")
 no_pred <- tibble(
-  setting = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"),
+  setting = factor(settings, levels = settings),
   plant1 = list(c(pea = 10), c(bean = 10), c(pea = 10, bean = 10))
 ) |>
   mutate(census = purrr::map(plant1, \(p1) {
     sc <- two_plant_scenario(p1, c(pea = 0), predator = FALSE, run_days = 60)
-    census_of(run_many(params, sc, 24, \(r) list(census = r$census)))
+    census_of(run_many(params, sc, 24, \(r) list(census = r$census))) |>
+      filter(plant == 1, species %in% names(p1)) # the founded species on plant 1
   })) |>
   select(setting, census) |>
   unnest(census) |>
-  filter(plant == 1, n > 0 | day == 0)
+  filter(n > 0 | day == 0)
 
 p_no_pred <- no_pred |>
   summarise(median = median(n), lo = quantile(n, 0.1), hi = quantile(n, 0.9), .by = c(setting, species, day)) |>
-  mutate(setting = factor(setting, levels = c("Pea aphids alone", "Bean aphids alone", "Pea + bean aphids together"))) |>
-  filter(!(setting == "Pea aphids alone" & species == "bean"), !(setting == "Bean aphids alone" & species == "pea")) |>
   mutate(species = as_aphid(species)) |>
   ggplot(aes(day, median, colour = species, fill = species)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) +
