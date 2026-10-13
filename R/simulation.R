@@ -108,7 +108,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       i <- n_used
     }
     a_sp[i] <<- species; a_plant[i] <<- plant; a_birth[i] <<- birth_time
-    a_fec[i] <<- rgamma(1, shape = frailty_shape[[species]], rate = frailty_shape[[species]])
+    a_fec[i] <<- sample_fecundity(1, frailty_shape[[species]])
     a_alive[i] <<- TRUE
     a_alate[i] <<- alate
     a_dd[i] <<- if (vial_mode) Inf else t + rexp_or_inf(1, dd_rate[plant, species])
@@ -141,7 +141,8 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     v[k + 1L] + (v[k + 2L] - v[k + 1L]) * (x - k)
   }
 
-  # Time to next birth by inversion of the CIF (see sample_birth_time()).
+  # Time to next birth by inversion of the CIF: sample_birth_time() with
+  # O(1) CIF lookups instead of approx().
   birth_wait <- function(sp, age, fec) {
     target <- cif_eval(sp, age) + rexp(1) / fec
     if (target >= cif_max[sp]) return(Inf)
@@ -160,15 +161,14 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
     }
   }
 
-  # Draw aphid i's base event: death (conditional Weibull, see
-  # sample_death_time()) vs its next birth or, if winged, its departure at
-  # maturity - winged aphids leave without reproducing on the plant.
+  # Draw aphid i's base event: death (conditional Weibull) vs its next birth
+  # or, if winged, its departure at maturity - winged aphids leave without
+  # reproducing on the plant.
   schedule_aphid <- function(i) {
     if (vial_mode) { a_next[i] <<- Inf; return(invisible()) }
     sp <- a_sp[i]
     age <- t - a_birth[i]
-    sh <- death_shape[[sp]]; sc <- death_scale[[sp]]
-    death <- sc * ((age / sc)^sh + rexp(1))^(1 / sh) - age
+    death <- sample_death_time(age, death_shape[[sp]], death_scale[[sp]])
     other <- if (a_alate[i]) max(age_mature[[sp]] - age, 0) else birth_wait(sp, age, a_fec[i])
     if (other < death) {
       a_base_next[i] <<- t + other; a_base_type[i] <<- if (a_alate[i]) EMIGRATION else BIRTH
@@ -355,7 +355,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
       m <- p$bean_handling_experienced
       m + (1 - m) * exp(-pr$n_bean / p$learn_meals)
     } else 1
-    exp(lp + p$handling$sigma * qlogis(runif(1))) * mult
+    sample_aft(lp, p$handling$sigma, "loglogistic") * mult
   }
 
   # ---- Predator: leaving a plant -------------------------------------------
@@ -372,7 +372,7 @@ simulate_two_plants <- function(params, scenario, seed = NULL) {
   # Leaf-level post-handling (leave) times, Weibull AFT; vectorized.
   sample_leave <- function(species, starve_h) {
     lp <- aphid_starve_lp(p$post_handling$coef, species, starve_h)
-    exp(lp + p$post_handling$sigma * log(-log(runif(length(species)))))
+    sample_aft(lp, p$post_handling$sigma, "weibull")
   }
 
   schedule_leave <- function(species, starve_h) {
